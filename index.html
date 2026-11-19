@@ -1003,7 +1003,7 @@ function sbRpc(name, args){ return sbReq('rpc/' + name, { method: 'POST', body: 
 /* ---------------- 登录与身份（Supabase Auth · 邮箱+密码；profiles 表定身份） ----------------
    身份只认 profiles.role：customer / teacher / admin。注册默认 customer（库里触发器建行）。
    读法：经 SECURITY DEFINER 的 RPC current_role() / my_teacher_name() 读（绕过 RLS）；
-   profiles 表自身的 RLS 策略有自引用递归，直查 profiles 会被数据库拒绝（42P17），不能直查定身份。
+   profiles 表还没给登录角色开放读取权限，直查 profiles 会被数据库拒绝（42501 permission denied），不能直查定身份。
    登录态只存在本页内存里，不写 localStorage；刷新后需重新登录。
    手机号仍是约课身份 key：登录后把 profiles.phone 与 customers 按手机号关联，
    customers.auth_user_id 写上登录账号 id，「我的」只按这个手机号/账号读自己的数据。 */
@@ -1067,8 +1067,8 @@ function fetchMyProfile(){
   if(!authUser) return Promise.resolve(null);
   /* 身份走库里的 SECURITY DEFINER 函数读：current_role() / my_teacher_name() 绕过 RLS、直接读 profiles，
      返回的就是库里这个账号的真实 role 和老师名字（已实测：店主账号返回 admin，老师账号返回 teacher + 林老师）。
-     为什么不用直查 profiles：profiles 表自身的 RLS 策略有自引用递归（Postgres 42P17），
-     任何直查/PATCH profiles 的 REST 请求都会被数据库以 500 拒绝。旧逻辑直查失败后
+     为什么不用直查 profiles：这张表还没给登录角色开放权限（实测 42501 permission denied），
+     任何直查/PATCH profiles 的 REST 请求都会被数据库拒绝。旧逻辑直查失败后
      兜底补了一个「顾客」身份，于是店主和老师登录后都被显示成顾客，管理/工作台 tab 也永不出现。
      现在先用 RPC 定身份，再尽力直查一行补 phone 等字段；直查失败不影响已读到的身份。 */
   var rpcProf = Promise.all([
@@ -1222,7 +1222,20 @@ function renderRoles(){
         '<button class="bookbtn brassbtn" style="margin-top:10px" onclick="saveRoleRow(' + i + ',\'' + esc(pr.id) + '\')">保存身份</button></div>';
     }).join('');
     box._rows = rows;
-  }).catch(function(){ box.innerHTML = '<p class="note-p" style="padding:6px 0">账号列表暂时读不到：数据库里 profiles 表的权限策略目前有自引用问题，直查 profiles 会被数据库拒绝。这不影响你的店主身份——你已经通过 current_role() 验证并进入店主端了；这个列表要等库里把 profiles 的策略改成用 current_role() 这类函数判断后才能读，改好后这里自动恢复。</p>'; });
+  }).catch(function(){
+    /* 直查 profiles 被数据库拒绝（实测 42501 permission denied：这张表还没给登录角色开放
+       读取 / 写入权限，anon 和 authenticated 都一样），所以完整列表暂时列不出来。
+       先把当前店主账号如实显示出来（邮箱来自登录、身份来自 current_role() 验证），
+       并把需要在库里补的那一步写清楚；库里授权补好后，上面的直查会自动恢复成完整列表。 */
+    var own = '';
+    if(authUser){
+      var r = currentRole();
+      own = '<div style="border-top:1px dashed var(--line);padding:10px 0">' +
+        '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b style="font-size:13.5px">' + esc(authUser.email) + '</b><span class="rolebadge ' + r + '">' + roleLabel(r) + '</span><span class="tag">就是你 · 当前登录账号</span></div>' +
+        '<p class="note-p" style="margin-top:6px">身份：' + roleLabel(r) + (authProfile && authProfile.teacher_name ? ' · 老师名字：' + esc(authProfile.teacher_name) : '') + (authProfile && authProfile.phone ? ' · 手机号：' + esc(authProfile.phone) : ' · 手机号还没绑定') + '</p></div>';
+    }
+    box.innerHTML = '<p class="note-p" style="padding:6px 0">全部账号列表暂时读不到：数据库还没给 profiles 表开放读取权限，登录账号直查这张表会被拒绝，所以其他账号暂时列不出来、身份也暂时改不了。需要在数据库里给 profiles 表补授权（GRANT SELECT, UPDATE ON public.profiles TO authenticated，并加一条店主可读全部账号的策略），补好后这里会自动恢复成完整列表。这不影响你已经通过 current_role() 验证的店主身份，店主端其他功能都正常。</p>' + own;
+  });
 }
 function saveRoleRow(i, pid){
   var box = $('rolesList'); var rows = box._rows || []; var pr = rows[i]; if(!pr) return;
@@ -1234,7 +1247,7 @@ function saveRoleRow(i, pid){
     toast('身份已保存：' + (pr.email || '') + ' 现在是' + roleLabel(role));
     if(authUser && pid === authUser.id) fetchMyProfile().then(function(){ updateAuthBtn(); });
     renderRoles();
-  }).catch(function(){ toast('保存没成功：库里 profiles 表的权限策略目前有自引用问题，暂时改不了身份（要先在库里修策略）。你的店主身份本身没问题。'); });
+  }).catch(function(){ toast('保存没成功：数据库还没给 profiles 表开放写入权限，要先在库里给这张表补授权才能改身份。你的店主身份本身没问题。'); });
 }
 
 function dbFire(p){ if(dbMode && p && p.catch) p.catch(function(){}); }
@@ -1287,8 +1300,20 @@ function mapBookingRow(r){
   return b;
 }
 var allBookings = [];   /* 店主端全量预约：仅店主解锁后才从库里加载，普通访客不会收到全量名单 */
-var adminDataErr = false; /* 店主端全量数据（bookings/customers）读取失败标记：库里这两张表的 RLS 策略同样有自引用递归，读不到时在店主端明示，不静默显示 0 */
+var adminDataErr = false; /* 店主端全量数据（bookings/customers）读取失败标记：读不到时在店主端明示，不静默显示 0 */
 function bkAll(){ return dbMode ? allBookings : bookings; }
+/* 名单人数只认预约记录：店主 / 老师数据加载后，按实际预约记录（未取消的单）重算每场的已约人数，
+   保证名单、日历、管理、老师端显示的「已约 X / Y」永远和预约记录对得上，
+   不再被场次表里残留的占用数字（remaining 与预约记录不一致时）带偏。
+   onlyTeacher 只重算该老师名下课程的场次（老师只加载了自己课的预约）。 */
+function reconcileSessionBooked(list, onlyTeacher){
+  var sums = {};
+  (list || []).forEach(function(b){ if(b.status !== 'cancelled' && b.sessId) sums[b.sessId] = (sums[b.sessId] || 0) + (b.qty || 1); });
+  items.forEach(function(it){
+    if(onlyTeacher && it.teacher !== onlyTeacher) return;
+    it.sessions.forEach(function(s){ s.booked = sums[s.id] || 0; });
+  });
+}
 function buildCatalog(itemRows, sessRows, cwRows){
   sessItemMap = {}; (sessRows || []).forEach(function(s){ if(s.item_id) sessItemMap[s.id] = { itemId: s.item_id }; });
   items = (itemRows || []).map(function(r){ return mapItemRow(r, sessRows); });
@@ -1372,6 +1397,7 @@ function loadAdminData(){
     custMap = {}; (res[0] || []).forEach(function(c){ custMap[c.id] = c; });
     if(myCustomer) custMap[myCustomer.id] = myCustomer;
     allBookings = (res[1] || []).map(mapBookingRow);
+    reconcileSessionBooked(allBookings);
   }).catch(function(){ adminDataErr = true; });
 }
 function loadFromDB(){
@@ -1498,6 +1524,7 @@ function initApp(){
   }).catch(function(){
     dbMode = false;
     items = SEED_ITEMS; bookings = SEED_BOOKINGS; myHistory = SEED_HISTORY.slice();
+    reconcileSessionBooked(bookings);
     var bn = $('dbBanner'); if(bn) bn.classList.remove('hidden');
     renderCards(); renderMy(); renderAdmin();
   });
@@ -1764,9 +1791,21 @@ function switchMineTab(t){
 }
 function infoCardEl(activeCount){
   var hasPf = !!myProfile.name;
+  /* 头像卡片要显示账号名 + 身份，不只写「我的」：名字优先用资料里的姓名，
+     其次用登录账号的信息（老师账号用老师名字，其他账号用登录邮箱）；
+     身份按登录账号的 role 显示（店主 / 老师 / 顾客），有手机号也一并显示。 */
+  var acctName = myProfile.name || (typeof authProfile !== 'undefined' && authProfile && (authProfile.display_name || authProfile.name || authProfile.teacher_name)) || '';
+  var acctEmail = (typeof authUser !== 'undefined' && authUser) ? authUser.email : '';
+  var role = (typeof currentRole === 'function') ? currentRole() : null;
+  var title = acctName || acctEmail || '我的';
+  var subParts = [];
+  if(acctName && acctEmail) subParts.push(acctEmail);
+  if(role) subParts.push('身份 · ' + roleLabel(role));
+  if(myProfile.phone) subParts.push(myProfile.phone);
+  if(!subParts.length) subParts.push(hasPf ? 'ETERN.III 手碟馆' : '完善资料，预约自动带入姓名手机号');
   var wrap = document.createElement('div');
   var prof = document.createElement('div'); prof.className='profile';
-  prof.innerHTML = '<div class="av">'+(hasPf ? initial(myProfile.name) : '客')+'</div><div style="min-width:0"><b>'+(hasPf ? esc(myProfile.name) : '我的')+'</b><small>'+(hasPf ? esc(myProfile.phone)+' · ETERN.III 手碟馆' : '完善资料，预约自动带入姓名手机号')+'</small></div><div class="pts"><b>'+activeCount+'</b><small>待上预约</small></div><button class="pfbtn" onclick="openProfile()">'+(hasPf ? '编辑资料' : '填写资料')+'</button>';
+  prof.innerHTML = '<div class="av">'+initial(title)+'</div><div style="min-width:0"><b>'+esc(title)+'</b><small>'+esc(subParts.join(' · '))+'</small></div><div class="pts"><b>'+activeCount+'</b><small>待上预约</small></div><button class="pfbtn" onclick="openProfile()">'+(hasPf ? '编辑资料' : '填写资料')+'</button>';
   wrap.appendChild(prof);
   var card = document.createElement('div'); card.className='mine-card';
   card.innerHTML = '<div class="mh"><h4>个人资料</h4><span class="tag brass">按手机号认人</span></div>' +
@@ -2378,7 +2417,7 @@ function renderDash(){
   var mRev = 0;
   active.forEach(function(b){ var s = sessOf(b); if(s && s.date.getFullYear()===now.getFullYear() && s.date.getMonth()===now.getMonth()) mRev += b.total; });
   $('dashCard').innerHTML =
-    (adminDataErr ? '<div class="dbbanner" style="margin-top:14px">预约名单和营收数据暂时读不到：数据库里 bookings / customers 两张表的权限策略目前有自引用问题，读取被数据库拒绝（和之前身份读不到是同一个库端问题）。课程、场次、日历和改价都正常；名单与营收要等库里把这两张表的策略修好后才会显示，不是没有预约。</div>' : '') +
+    (adminDataErr ? '<div class="dbbanner" style="margin-top:14px">预约名单和营收数据暂时读不到：数据库读取 bookings / customers 时被拒绝。课程、场次、日历和改价都正常；名单与营收等数据库恢复读取后会重新显示，不是没有预约。</div>' : '') +
     '<div class="stat-grid">' +
       '<div class="stat hero-stat"><div><small>本月营收（USD）</small><b>'+money(mRev)+'</b></div><div class="hs-r">已付 + 待付合计<br />共 '+active.length+' 单有效预约</div></div>' +
       '<div class="stat"><small>今日场次</small><b>'+todays.length+' <i>场 · 已约 '+peopleToday+' 人</i></b></div>' +
@@ -3065,7 +3104,7 @@ function renderRevenue(){
     '<div class="stat-grid">' +
     '<div class="stat hero-stat"><div><small>总营收（USD）</small><b>'+money(paid+hold)+'</b></div><div class="hs-r">已付 '+money(paid)+'<br />待付 '+money(hold)+'</div></div>' +
     '<div class="stat"><small>已付 · 已收款（Stripe / 余额）</small><b>'+money(paid)+'</b></div>' +
-    '<div class="stat"><small>待付 · 占位未付款</small><b>'+money(hold)+' <i>'+holdN+' 单</i></b></div>' +
+    '<div class="stat"><small>待付 · 占位未付款</small><b>'+money(hold)+' <i>· '+holdN+' 单</i></b></div>' +
     '</div>';
 
   var catMeta = { handpan:['手碟','#e6ecdf',ICONS.book,'#57755f'], yoga:['瑜伽','#f3e3c8',ICONS.spark,'#a96f2e'], pilates:['普拉提','#f3e3c8',ICONS.spark,'#a96f2e'], venue:['空间','#eee4d3',ICONS.key,'#8a6a42'] };
@@ -3165,6 +3204,7 @@ function loadTeacherData(){
     return custChain.then(function(cs){
       (cs || []).forEach(function(c){ custMap[c.id] = c; });
       teacherBookings = (rows || []).map(mapBookingRow);
+      reconcileSessionBooked(teacherBookings, teacherName);
     });
   }).catch(function(){ teacherBookings = []; });
 }
