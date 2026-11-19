@@ -414,6 +414,13 @@ button.week-row:active{ background:var(--paper2); }
 .week-row .wl .go{ font-size:11px; color:var(--brass); font-weight:800; display:block; margin-top:1px; }
 .week-row.full{ opacity:.5; }
 .week-none{ font-size:12px; color:var(--ink2); padding:2px 0 8px; }
+.week-nav{ display:flex; align-items:center; gap:8px; padding:11px 0 9px; border-bottom:1px solid var(--line); }
+.week-nav .ghostbtn{ padding:7px 12px; font-size:12.5px; white-space:nowrap; }
+.week-nav .wnav-m{ flex:1; min-width:0; text-align:center; line-height:1.35; }
+.week-nav .wnav-m b{ font-family:"Noto Serif SC",serif; font-size:14.5px; display:block; letter-spacing:.04em; }
+.week-nav .wnav-m small{ font-size:11px; color:var(--ink2); display:block; margin-top:1px; }
+.week-back{ text-align:center; padding:9px 0 1px; }
+.week-back button{ font-size:12px; font-weight:800; color:var(--brass); padding:4px 10px; }
 </style>
 </head>
 <body>
@@ -454,10 +461,16 @@ button.week-row:active{ background:var(--paper2); }
           <div class="week-wrap">
             <button class="week-toggle" id="weekToggle" onclick="toggleWeek()" aria-expanded="false" aria-controls="weekPanel">
               <span class="wi"><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="16" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg></span>
-              <span class="wm"><b>本周课表</b><small id="weekRange">点一下展开，看本周每天有什么课</small></span>
+              <span class="wm"><b id="weekTitle">本周课表</b><small id="weekRange">点一下展开，看本周每天有什么课</small></span>
               <span class="chev"><span id="weekChevTxt">展开</span><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></span>
             </button>
             <div class="week-panel hidden" id="weekPanel">
+              <div class="week-nav" role="navigation" aria-label="切换周">
+                <button type="button" class="ghostbtn" onclick="shiftWeek(-1)" aria-label="看上一周的课表">← 上一周</button>
+                <span class="wnav-m"><b id="weekNavLabel">本周</b><small id="weekNavRange"></small></span>
+                <button type="button" class="ghostbtn" onclick="shiftWeek(1)" aria-label="看下一周的课表">下一周 →</button>
+              </div>
+              <div class="week-back hidden" id="weekBackRow"><button type="button" onclick="goThisWeek()">回到本周</button></div>
               <div id="weekBody"></div>
               <p class="note-p" style="margin-top:10px">点任意一节课，直接去约那一节（约课时再登录就行，看课表不用登录）。空间租用不在周课表里，在下面目录里自选时段。</p>
             </div>
@@ -1560,17 +1573,26 @@ function goCatalog(cat){
   setTimeout(function(){ $('catalog').scrollIntoView({behavior:'smooth'}); }, 60);
 }
 
-/* ---------------- 本周课表（顾客端 · 默认收起，不登录可看） ---------------- */
+/* ---------------- 周课表（顾客端 · 默认收起、默认本周，可翻上一周 / 下一周，不登录可看） ---------------- */
 var weekOpen = false;
+var weekOffset = 0; /* 0 = 本周，1 = 下周，-1 = 上周；页面打开时默认 0（本周） */
 var WEEKDAY_LABELS = ['周一','周二','周三','周四','周五','周六','周日'];
-function weekMonday(){
+function weekMonday(offset){
+  var off = (typeof offset === 'number') ? offset : weekOffset;
   var d = new Date(); d.setHours(0,0,0,0);
   var delta = (d.getDay() + 6) % 7; /* 周一为一周第一天 */
-  d.setDate(d.getDate() - delta);
+  d.setDate(d.getDate() - delta + off * 7);
   return d;
 }
-function collectWeekSessions(){
-  var mon = weekMonday();
+function weekLabel(offset){
+  var off = (typeof offset === 'number') ? offset : weekOffset;
+  if(off === 0) return '本周';
+  if(off === 1) return '下周';
+  if(off === -1) return '上周';
+  return off > 0 ? (off + ' 周后') : ((-off) + ' 周前');
+}
+function collectWeekSessions(offset){
+  var mon = weekMonday(offset);
   var days = [];
   for(var i = 0; i < 7; i++){
     var d = new Date(mon); d.setDate(d.getDate() + i);
@@ -1595,17 +1617,34 @@ function collectWeekSessions(){
   });
   return { mon: mon, days: days };
 }
-function weekCountText(){
-  var w = collectWeekSessions();
+function weekCountText(offset){
+  var w = collectWeekSessions(offset);
   var total = w.days.reduce(function(a, d){ return a + d.rows.length; }, 0);
   var sun = new Date(w.mon); sun.setDate(sun.getDate() + 6);
   var range = (w.mon.getMonth()+1) + '月' + w.mon.getDate() + '日 – ' + (sun.getMonth()+1) + '月' + sun.getDate() + '日';
-  return { range: range, total: total };
+  return { range: range, total: total, label: weekLabel(offset) };
 }
 function updateWeekHeader(){
-  var el = $('weekRange'); if(!el) return;
   var info = weekCountText();
-  el.textContent = info.range + (info.total ? ' · 本周共 ' + info.total + ' 节，点一下展开' : ' · 点一下展开看每天的课');
+  var el = $('weekRange');
+  if(el) el.textContent = info.range + (info.total ? ' · ' + info.label + '共 ' + info.total + ' 节，点一下展开' : ' · 点一下展开看每天的课');
+  var title = $('weekTitle');
+  if(title) title.textContent = info.label + '课表';
+  var navLabel = $('weekNavLabel');
+  if(navLabel) navLabel.textContent = info.label;
+  var navRange = $('weekNavRange');
+  if(navRange) navRange.textContent = info.range + (info.total ? ' · 共 ' + info.total + ' 节' : ' · 暂无课程');
+  var backRow = $('weekBackRow');
+  if(backRow) backRow.classList.toggle('hidden', weekOffset === 0);
+}
+function shiftWeek(delta){
+  weekOffset += delta;
+  renderWeek();
+}
+function goThisWeek(){
+  if(weekOffset === 0) return;
+  weekOffset = 0;
+  renderWeek();
 }
 function toggleWeek(){
   weekOpen = !weekOpen;
@@ -1619,6 +1658,11 @@ function renderWeek(){
   updateWeekHeader();
   var body = $('weekBody'); if(!body) return;
   var w = collectWeekSessions();
+  var totalRows = w.days.reduce(function(a, d){ return a + d.rows.length; }, 0);
+  if(!totalRows){
+    body.innerHTML = '<div class="week-none" style="padding:14px 0 10px;text-align:center">' + weekLabel() + '暂时没有排课。<br />可以点上面的「' + (weekOffset >= 0 ? '下一周' : '上一周') + '」看看其他周，或点「回到本周」。</div>';
+    return;
+  }
   var today = new Date(); today.setHours(0,0,0,0);
   var html = w.days.map(function(day, i){
     var isToday = day.date.getTime() === today.getTime();
@@ -1636,7 +1680,7 @@ function renderWeek(){
     }).join('');
     return head + rows + '</div>';
   }).join('');
-  body.innerHTML = html || '<div class="week-none">本周暂时没有课</div>';
+  body.innerHTML = html || '<div class="week-none">这一周暂时没有课</div>';
 }
 function bookWeekSession(itemId, sessId){
   var it = findItem(itemId); if(!it) return;
