@@ -1212,10 +1212,13 @@ function renderRoles(){
     rows = rows || [];
     if(!rows.length){ box.innerHTML = '<p class="note-p" style="padding:6px 0">profiles 里还没有账号。新用户注册后会自动出现在这里（默认顾客）。第一个店主账号需要先注册，再由有权限的人把 role 改成 admin。</p>'; return; }
     box.innerHTML = rows.map(function(pr, i){
-      var em = esc(pr.email || pr.id || '');
+      /* profiles 表没有邮箱列，读不到邮箱：行标题先显示姓名 / 老师名字 / 手机号，
+         都没有就显示「未填写资料」，不要把账号 UUID 直接露出来。 */
+      var nm = pr.display_name || pr.name || pr.teacher_name || '';
+      var em = esc(nm || pr.phone || '未填写资料');
       var role = pr.role || 'customer';
       return '<div style="border-top:1px dashed var(--line);padding:10px 0">' +
-        '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b style="font-size:13.5px">' + em + '</b><span class="rolebadge ' + role + '">' + roleLabel(role) + '</span>' + (authUser && pr.id===authUser.id ? '<span class="tag">就是你</span>' : '') + '</div>' +
+        '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b style="font-size:13.5px">' + em + '</b>' + (nm && pr.phone ? '<span style="font-size:12px;color:var(--ink2)">' + esc(pr.phone) + '</span>' : '') + '<span class="rolebadge ' + role + '">' + roleLabel(role) + '</span>' + (authUser && pr.id===authUser.id ? '<span class="tag">就是你</span>' : '') + '</div>' +
         '<div class="field"><label>身份</label><select id="role-sel-' + i + '"><option value="customer"' + (role==='customer'?' selected':'') + '>顾客 customer</option><option value="teacher"' + (role==='teacher'?' selected':'') + '>老师 teacher</option><option value="admin"' + (role==='admin'?' selected':'') + '>店主 admin</option></select></div>' +
         '<div class="field"><label>手机号（约课认人）</label><input id="role-phone-' + i + '" value="' + esc(pr.phone || '') + '" placeholder="例如：(206) 555-0100" /></div>' +
         '<div class="field"><label>老师名字（身份是老师时填，要和课程上的老师名字一字不差）</label><input id="role-tn-' + i + '" value="' + esc(pr.teacher_name || '') + '" placeholder="如：林老师" /></div>' +
@@ -1244,7 +1247,7 @@ function saveRoleRow(i, pid){
   var tn = $('role-tn-' + i).value.trim();
   if(role === 'teacher' && !tn){ toast('身份是老师时，要填老师名字，TA 登录后才能认出自己教的课'); return; }
   sbReq('profiles?id=eq.' + encodeURIComponent(pid), { method:'PATCH', body:{ role: role, phone: phone || null, teacher_name: tn || null } }).then(function(){
-    toast('身份已保存：' + (pr.email || '') + ' 现在是' + roleLabel(role));
+    toast('身份已保存：' + (pr.display_name || pr.name || pr.teacher_name || phone || pr.phone || '未填写资料') + ' 现在是' + roleLabel(role));
     if(authUser && pid === authUser.id) fetchMyProfile().then(function(){ updateAuthBtn(); });
     renderRoles();
   }).catch(function(){ toast('保存没成功：数据库还没给 profiles 表开放写入权限，要先在库里给这张表补授权才能改身份。你的店主身份本身没问题。'); });
