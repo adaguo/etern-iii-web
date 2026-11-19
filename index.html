@@ -877,6 +877,8 @@ function sbReq(path, opts){
 function sbRpc(name, args){ return sbReq('rpc/' + name, { method: 'POST', body: args }); }
 /* ---------------- 登录与身份（Supabase Auth · 邮箱+密码；profiles 表定身份） ----------------
    身份只认 profiles.role：customer / teacher / admin。注册默认 customer（库里触发器建行）。
+   读法：经 SECURITY DEFINER 的 RPC current_role() / my_teacher_name() 读（绕过 RLS）；
+   profiles 表自身的 RLS 策略有自引用递归，直查 profiles 会被数据库拒绝（42P17），不能直查定身份。
    登录态只存在本页内存里，不写 localStorage；刷新后需重新登录。
    手机号仍是约课身份 key：登录后把 profiles.phone 与 customers 按手机号关联，
    customers.auth_user_id 写上登录账号 id，「我的」只按这个手机号/账号读自己的数据。 */
@@ -937,19 +939,36 @@ function setAuthMode(m){
 }
 function fetchMyProfile(){
   if(!authUser) return Promise.resolve(null);
-  function byCol(col){
-    return sbReq('profiles?select=*&' + col + '=eq.' + encodeURIComponent(authUser.id)).then(function(rows){ return (rows && rows.length) ? rows[0] : null; }).catch(function(){ return null; });
-  }
-  /* 先按 id 查；查不到或报错（列名/权限问题）再按 user_id 查，避免店主/老师身份被误读成顾客、管理 tab 不出现 */
-  return byCol('id').then(function(p){ return p || byCol('user_id'); }).then(function(prof){
-    if(!prof){
-      /* 没有 profiles 行就补建一行，默认顾客（防自己改身份的触发器在库里，这里只建 customer） */
-      var body = { id: authUser.id, role: 'customer', email: authUser.email };
-      if(myProfile && myProfile.phone) body.phone = myProfile.phone;
-      return sbReq('profiles', { method:'POST', body: body, prefer:'return=representation' }).then(function(rows){ return rows && rows[0] ? rows[0] : body; }).catch(function(){ return body; });
+  /* 身份走库里的 SECURITY DEFINER 函数读：current_role() / my_teacher_name() 绕过 RLS、直接读 profiles，
+     返回的就是库里这个账号的真实 role 和老师名字（已实测：店主账号返回 admin，老师账号返回 teacher + 林老师）。
+     为什么不用直查 profiles：profiles 表自身的 RLS 策略有自引用递归（Postgres 42P17），
+     任何直查/PATCH profiles 的 REST 请求都会被数据库以 500 拒绝。旧逻辑直查失败后
+     兜底补了一个「顾客」身份，于是店主和老师登录后都被显示成顾客，管理/工作台 tab 也永不出现。
+     现在先用 RPC 定身份，再尽力直查一行补 phone 等字段；直查失败不影响已读到的身份。 */
+  var rpcProf = Promise.all([
+    sbRpc('current_role', {}).catch(function(){ return null; }),
+    sbRpc('my_teacher_name', {}).catch(function(){ return null; })
+  ]).then(function(res){
+    var role = res[0];
+    return { id: authUser.id, email: authUser.email,
+      role: (role === 'admin' || role === 'teacher') ? role : 'customer',
+      teacher_name: res[1] || null, phone: null };
+  });
+  var rowProf = sbReq('profiles?select=*&id=eq.' + encodeURIComponent(authUser.id))
+    .then(function(rows){ return (rows && rows.length) ? rows[0] : null; })
+    .catch(function(){ return null; });
+  return Promise.all([rpcProf, rowProf]).then(function(res){
+    var prof = res[0], row = res[1];
+    if(row){
+      if(row.phone) prof.phone = row.phone;
+      if(row.display_name) prof.display_name = row.display_name;
+      if(row.name) prof.name = row.name;
+      if(!prof.teacher_name && row.teacher_name) prof.teacher_name = row.teacher_name;
+      if(prof.role === 'customer' && (row.role === 'admin' || row.role === 'teacher')) prof.role = row.role;
     }
+    authProfile = prof;
     return prof;
-  }).then(function(prof){ authProfile = prof; return prof; });
+  });
 }
 function syncPhoneLink(phoneFromForm){
   /* 把登录账号和手机号关联：profiles.phone + customers.auth_user_id */
@@ -1075,7 +1094,7 @@ function renderRoles(){
         '<button class="bookbtn brassbtn" style="margin-top:10px" onclick="saveRoleRow(' + i + ',\'' + esc(pr.id) + '\')">保存身份</button></div>';
     }).join('');
     box._rows = rows;
-  }).catch(function(){ box.innerHTML = '<p class="note-p" style="padding:6px 0">账号列表读不到（可能 profiles 的读取权限还没放开给店主）。你自己的身份已按登录读到；列表权限放开后这里就能改所有人。</p>'; });
+  }).catch(function(){ box.innerHTML = '<p class="note-p" style="padding:6px 0">账号列表暂时读不到：数据库里 profiles 表的权限策略目前有自引用问题，直查 profiles 会被数据库拒绝。这不影响你的店主身份——你已经通过 current_role() 验证并进入店主端了；这个列表要等库里把 profiles 的策略改成用 current_role() 这类函数判断后才能读，改好后这里自动恢复。</p>'; });
 }
 function saveRoleRow(i, pid){
   var box = $('rolesList'); var rows = box._rows || []; var pr = rows[i]; if(!pr) return;
@@ -1087,7 +1106,7 @@ function saveRoleRow(i, pid){
     toast('身份已保存：' + (pr.email || '') + ' 现在是' + roleLabel(role));
     if(authUser && pid === authUser.id) fetchMyProfile().then(function(){ updateAuthBtn(); });
     renderRoles();
-  }).catch(function(){ toast('保存没成功。可能库里防改身份的规则只允许店主改——确认你是用店主账号登录的再试。'); });
+  }).catch(function(){ toast('保存没成功：库里 profiles 表的权限策略目前有自引用问题，暂时改不了身份（要先在库里修策略）。你的店主身份本身没问题。'); });
 }
 
 function dbFire(p){ if(dbMode && p && p.catch) p.catch(function(){}); }
@@ -1131,6 +1150,7 @@ function mapBookingRow(r){
   return b;
 }
 var allBookings = [];   /* 店主端全量预约：仅店主解锁后才从库里加载，普通访客不会收到全量名单 */
+var adminDataErr = false; /* 店主端全量数据（bookings/customers）读取失败标记：库里这两张表的 RLS 策略同样有自引用递归，读不到时在店主端明示，不静默显示 0 */
 function bkAll(){ return dbMode ? allBookings : bookings; }
 function buildCatalog(itemRows, sessRows, cwRows){
   sessItemMap = {}; (sessRows || []).forEach(function(s){ if(s.item_id) sessItemMap[s.id] = { itemId: s.item_id }; });
@@ -1215,10 +1235,11 @@ function loadAdminData(){
     sbReq('customers?select=*'),
     sbReq('bookings?select=*&order=created_at.desc')
   ]).then(function(res){
+    adminDataErr = false;
     custMap = {}; (res[0] || []).forEach(function(c){ custMap[c.id] = c; });
     if(myCustomer) custMap[myCustomer.id] = myCustomer;
     allBookings = (res[1] || []).map(mapBookingRow);
-  }).catch(function(){});
+  }).catch(function(){ adminDataErr = true; });
 }
 function loadFromDB(){
   return sbReq('items?select=*&order=created_at.asc').then(function(itemRows){
@@ -2102,6 +2123,7 @@ function renderDash(){
   var mRev = 0;
   active.forEach(function(b){ var s = sessOf(b); if(s && s.date.getFullYear()===now.getFullYear() && s.date.getMonth()===now.getMonth()) mRev += b.total; });
   $('dashCard').innerHTML =
+    (adminDataErr ? '<div class="dbbanner" style="margin-top:14px">预约名单和营收数据暂时读不到：数据库里 bookings / customers 两张表的权限策略目前有自引用问题，读取被数据库拒绝（和之前身份读不到是同一个库端问题）。课程、场次、日历和改价都正常；名单与营收要等库里把这两张表的策略修好后才会显示，不是没有预约。</div>' : '') +
     '<div class="stat-grid">' +
       '<div class="stat hero-stat"><div><small>本月营收（USD）</small><b>'+money(mRev)+'</b></div><div class="hs-r">已付 + 待付合计<br />共 '+active.length+' 单有效预约</div></div>' +
       '<div class="stat"><small>今日场次</small><b>'+todays.length+' <i>场 · 已约 '+peopleToday+' 人</i></b></div>' +
