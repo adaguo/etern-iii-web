@@ -715,6 +715,21 @@ img{ display:block; max-width:100%; }
       </div>
     </div>
 
+    <!-- 店主端已锁定：重新验证 sheet（输当前店主账号密码，后端验过才重新解锁） -->
+    <div class="sheet" id="reauthSheet" role="dialog" aria-modal="true">
+      <div class="scroll">
+        <div class="backrow"><button class="backbtn" onclick="closeReauth()" aria-label="返回"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button></div>
+        <div class="dbody" style="padding-top:62px">
+          <h2 class="serif" style="margin-top:0">店主端已锁定</h2>
+          <p class="ddesc">你刚才已退出店主端并锁定。当前登录账号是 <b id="reauthEmail"></b>（店主），重新进入店主端前，要再输一次这个账号的密码验证身份——锁定后点「管理」tab 不会直接放行。</p>
+          <div class="field"><label for="reauthPassword">店主账号密码</label><input id="reauthPassword" type="password" placeholder="输入当前账号的密码" autocomplete="current-password" onkeydown="if(event.key==='Enter')submitReauth()" /></div>
+          <p id="reauthErr" style="color:var(--red);font-weight:700;min-height:22px;margin:10px 0 0"></p>
+          <button class="wide-btn" id="reauthSubmit" style="margin-top:12px;background:var(--brass)" onclick="submitReauth()">验证并进入店主端</button>
+          <button class="ghost-btn" onclick="closeReauth()">取消（保持锁定）</button>
+        </div>
+      </div>
+    </div>
+
     <!-- 个人资料 sheet -->
     <div class="sheet" id="profileSheet" role="dialog" aria-modal="true">
       <div class="scroll">
@@ -888,6 +903,7 @@ var authProfile = null;   /* profiles 行 {id, role, phone, teacher_name, displa
 var authMode = 'login';   /* login | register */
 var authIntent = null;    /* mine | admin | teacher | null —— 登录成功后要去的地方 */
 var adminUnlocked = false;
+var adminLocked = false;   /* 「退出店主端并锁定」置 true：解锁状态清掉后，再进店主端必须重新输密码验证（submitReauth），点「管理」tab 不再直接放行；重新登录也会清掉 */
 function isLoggedIn(){ return !!authUser; }
 function currentRole(){ return authProfile && authProfile.role ? authProfile.role : (authUser ? 'customer' : null); }
 function roleLabel(r){ return r==='admin' ? '店主' : r==='teacher' ? '老师' : '顾客'; }
@@ -998,6 +1014,7 @@ function applyProfileToMine(){
 }
 function routeAfterLogin(){
   var intent = authIntent; authIntent = null;
+  adminLocked = false; /* 刚输密码登录成功本身就是一次身份验证，清掉锁定标记 */
   updateAuthBtn(); applyProfileToMine();
   if(intent === 'admin'){ enterAdminIfAllowed(); return; }
   if(intent === 'teacher'){ enterTeacherIfAllowed(); return; }
@@ -1044,7 +1061,7 @@ function submitAuth(){
 function closeAuthSilent(){ $('authSheet').classList.remove('open'); }
 function doLogout(){
   var tok = authToken;
-  authUser = null; authToken = null; authProfile = null; adminUnlocked = false; teacherName = null; teacherBookings = [];
+  authUser = null; authToken = null; authProfile = null; adminUnlocked = false; adminLocked = false; teacherName = null; teacherBookings = [];
   myCustomer = null; bookings = dbMode ? [] : bookings; walletState = { balanceCents: 0, txns: [] };
   updateAuthBtn();
   switchView('customer'); showPage('book');
@@ -1062,6 +1079,7 @@ function requireLogin(intent){
 function enterAdminIfAllowed(){
   if(!isLoggedIn()){ openAuth('admin'); return; }
   if(currentRole() !== 'admin'){ toast('你现在的身份是' + roleLabel(currentRole()) + '，店主端只有店主账号能进。身份由店主在店主端改。'); return; }
+  if(adminLocked){ openReauth(); return; } /* 已锁定：必须先重新输密码验证，光点 tab 进不去 */
   adminUnlocked = true; switchView('admin');
 }
 function enterTeacherIfAllowed(){
@@ -3046,10 +3064,58 @@ function openGate(){
   enterAdminIfAllowed();
 }
 function closeGate(){ $('gateSheet').classList.remove('open'); }
+/* ---------------- 店主端锁定 / 重新验证 ----------------
+   锁定 = 清掉解锁状态 + 置 adminLocked。之后所有进店主端的入口（「管理」tab、
+   switchView('admin')、连点碟片的隐蔽入口）都会先进 enterAdminIfAllowed，
+   命中 adminLocked 就只弹重新验证层，输对当前店主账号密码（走 Supabase 登录
+   接口由后端验）才重新解锁；验错或取消都保持锁定。 */
+function openReauth(){
+  var em = $('reauthEmail'); if(em) em.textContent = authUser ? authUser.email : '';
+  var pw = $('reauthPassword'); if(pw) pw.value = '';
+  var er = $('reauthErr'); if(er) er.textContent = '';
+  $('reauthSheet').classList.add('open');
+  setTimeout(function(){ var p = $('reauthPassword'); if(p) p.focus(); }, 80);
+}
+function closeReauth(){ $('reauthSheet').classList.remove('open'); }
+function submitReauth(){
+  if(!authUser){ closeReauth(); openAuth('admin'); return; }
+  var pwEl = $('reauthPassword');
+  var pw = pwEl ? pwEl.value : '';
+  var errEl = $('reauthErr');
+  errEl.textContent = '';
+  if(!pw){ errEl.textContent = '请输入密码。'; return; }
+  var btn = $('reauthSubmit'); btn.disabled = true; btn.textContent = '验证中…';
+  function doneBtn(){ btn.disabled = false; btn.textContent = '验证并进入店主端'; }
+  sbAuthReq('token?grant_type=password', { body: { email: authUser.email, password: pw } }).then(function(data){
+    if(!data || !data.access_token) throw new Error('验证没通过，请重新输入密码');
+    /* 用新会话替换旧会话，再重新读一次身份：仍是店主才解锁 */
+    authToken = data.access_token;
+    if(data.user) authUser = { id: data.user.id, email: data.user.email || authUser.email };
+    return fetchMyProfile().then(function(){
+      doneBtn();
+      if(currentRole() !== 'admin'){ errEl.textContent = '这个账号现在的身份不是店主，进不了店主端。'; return; }
+      adminLocked = false; adminUnlocked = true;
+      closeReauth(); updateAuthBtn();
+      switchView('admin');
+      toast('验证通过，已重新进入店主端');
+    });
+  }).catch(function(e){
+    doneBtn();
+    var msg = (e && e.message) || '验证失败';
+    if(/Invalid login/i.test(msg)) msg = '密码不对，店主端保持锁定。';
+    else if(!dbMode || /Failed to fetch|NetworkError|Load failed/i.test(msg)) msg = '现在没连上数据库，没法验证密码，店主端保持锁定。连上后再试。';
+    errEl.textContent = msg;
+  });
+}
 function lockAdmin(){
   adminUnlocked = false;
+  adminLocked = true;
+  /* 锁定即清掉已加载的店主全量数据，回到顾客端后不留名单 / 营收 / 账号列表 */
+  allBookings = []; adminDataErr = false;
+  var rl = $('rolesList'); if(rl) rl.innerHTML = '';
   switchView('customer');
-  toast('已退出店主端（还保持登录；下次进店主端会再按店主身份校验）');
+  goPage('book');
+  toast('已退出店主端并锁定。再进店主端要点「管理」tab 并重新输密码验证。');
 }
 
 /* clock */
