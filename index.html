@@ -53,7 +53,7 @@ img{ display:block; max-width:100%; }
 .capsule .ring{ width:11px; height:11px; border:1.6px solid var(--ink2); border-radius:50%; background:none; position:relative; }
 .capsule .ring::after{ content:""; position:absolute; inset:3px; border-radius:50%; background:var(--ink2); }
 
-.apphead{ flex:none; padding:8px 18px 10px; display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.apphead{ flex:none; padding:8px 18px 10px; display:flex; align-items:center; justify-content:space-between; gap:10px; position:relative; z-index:6; }
 .brand{ display:flex; align-items:center; gap:9px; min-width:0; }
 .brand .disc{ width:34px; height:34px; flex:none; border-radius:50%;
   background:radial-gradient(circle at 38% 34%, #d9b078, #a96f2e 55%, #6e4517);
@@ -66,7 +66,7 @@ img{ display:block; max-width:100%; }
 .roleswitch button{ padding:6px 13px; border-radius:999px; font-size:12.5px; font-weight:700; color:var(--ink2); transition:.18s; }
 .roleswitch button.on{ background:var(--ink); color:#f5efe0; }
 
-.viewport{ flex:1; overflow-y:auto; overflow-x:hidden; position:relative; scrollbar-width:none; }
+.viewport{ flex:1; overflow-y:auto; overflow-x:hidden; position:relative; scrollbar-width:none; scroll-padding-top:10px; overscroll-behavior:contain; }
 .viewport::-webkit-scrollbar{ display:none; }
 
 /* ---------- generic bits ---------- */
@@ -191,7 +191,7 @@ img{ display:block; max-width:100%; }
 .cw a.file .fo{ color:var(--brass); font-weight:800; flex:none; font-size:12px; }
 
 /* ---------- tab bar ---------- */
-.tabbar{ flex:none; display:flex; background:rgba(255,253,247,.94); backdrop-filter:blur(8px); border-top:1px solid var(--line); padding:8px 6px calc(10px + env(safe-area-inset-bottom)); }
+.tabbar{ flex:none; display:flex; background:rgba(255,253,247,.94); backdrop-filter:blur(8px); border-top:1px solid var(--line); padding:8px 6px calc(10px + env(safe-area-inset-bottom)); position:relative; z-index:6; }
 .tabbar button{ flex:1; display:flex; flex-direction:column; align-items:center; gap:3px; font-size:10.5px; font-weight:700; color:#9a927c; padding:2px 0; position:relative; }
 .tabbar button svg{ width:22px; height:22px; stroke:#9a927c; fill:none; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
 .tabbar button.on{ color:var(--brass); }
@@ -505,7 +505,7 @@ html[lang="en"] input,html[lang="en"] select,html[lang="en"] textarea{ font-fami
 .apphead{ border-bottom:1px solid var(--line); background:var(--paper); padding-top:10px; padding-bottom:12px; }
 .viewport{ width:100%; }
 #customerView,#adminView,#teacherView{ width:100%; }
-#pageBook{ width:100%; max-width:1180px; margin:0 auto; padding-bottom:8px; }
+#pageBook{ width:100%; max-width:1320px; margin:0 auto; padding-bottom:8px; }
 #pageMine,#adminView,#teacherView{ max-width:920px; margin:0 auto; }
 .foot-note{ max-width:920px; margin:0 auto; }
 .dbbanner{ max-width:920px; margin-left:auto; margin-right:auto; }
@@ -536,14 +536,15 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 }
 @media (min-width:1024px){
   /* 顶部区域与内容同宽居中 */
-  .statusbar,.apphead{ width:100%; max-width:1180px; margin:0 auto; }
+  .statusbar,.apphead{ width:100%; max-width:1320px; margin:0 auto; }
   .statusbar{ padding-top:12px; }
   /* 底部 tab 在电脑上变成顶部的导航条（同一组按钮，不重复造） */
   .tabbar{
-    order:2; width:100%; max-width:1180px; margin:0 auto;
+    order:2; width:100%; max-width:1320px; margin:0 auto;
     justify-content:flex-start; gap:6px;
     background:var(--paper); border-top:none; border-bottom:1px solid var(--line);
     padding:8px 18px;
+    backdrop-filter:none; position:relative; z-index:6;
   }
   .apphead{ order:1; } .viewport{ order:3; }
   .tabbar button{
@@ -1468,12 +1469,31 @@ function timeRange(startsAt, mins, endsAt){
   if(en === null || en <= st) en = st + (mins || 60);
   return fmtMin(st) + '–' + fmtMin(en);
 }
+/* 库里有 9 门课的标题存成了中英并存（「手碟基础班 Handpan Foundation」），英文版会把中文再翻一遍、
+   和自带英文撞成重复标题；这里统一收成规范名（与种子数据一致），翻译层只翻一次。
+   认不出的标题按「中文在前、英文在后」兜底截断。 */
+var KNOWN_TITLES = ['手碟系统团课 · 10 节进阶','周末声音浴 · 手碟与颂钵','主厅 · 共鸣空间','手碟系统团课','寰宇 Cross Mat','手碟零基础班','手碟体验课','手碟基础班','手碟进阶班','亲子手碟工作坊','一对一私教课','手碟曲目','垫上普拉提','阿汤领课','流瑜伽'];
+function cleanItemTitle(t){
+  t = String(t || '').trim();
+  for(var i = 0; i < KNOWN_TITLES.length; i++){
+    var k = KNOWN_TITLES[i];
+    if(t === k || t.indexOf(k + ' ') === 0) return k;
+  }
+  var m = t.match(/^([\u4e00-\u9fff][\u4e00-\u9fff\s·、，。：\/]*?)\s+[A-Za-z].*$/);
+  return m ? m[1].trim() : t;
+}
+/* 库里 9 门周课的 description 是空的：卡片简介用种子数据里同名项目的简介兜底，不留空白 */
+function seedDescFor(name){
+  for(var i = 0; i < SEED_ITEMS.length; i++){ if(SEED_ITEMS[i].name === name) return SEED_ITEMS[i].desc || ''; }
+  return '';
+}
 function mapItemRow(row, sessRows){
   var mins = row.duration_min || 60;
-  var cl = classifyTitle(row.title);
-  var it = { id: row.id, cat: (row.type === 'package' || row.category === 'package') ? 'package' : row.type, kind: cl.kind || 'handpan', level: cl.level, name: row.title, price: (row.price_cents || 0)/100,
+  var cleanName = cleanItemTitle(row.title);
+  var cl = classifyTitle(cleanName);
+  var it = { id: row.id, cat: (row.type === 'package' || row.category === 'package') ? 'package' : row.type, kind: cl.kind || 'handpan', level: cl.level, name: cleanName, price: (row.price_cents || 0)/100,
     unit: (row.category && ['人','节','套','小时','组家庭','份','次'].indexOf(row.category) >= 0) ? row.category : (row.type==='venue' ? '小时' : ((row.type === 'package' || row.category === 'package') ? '套' : '人')), dur: durText(row.type, mins), durMin: mins,
-    teacher: row.teacher || '—', img: imgForRow(row), desc: row.description || '', on: row.is_active !== false, sessions: [], files: [] };
+    teacher: row.teacher || '—', img: imgForRow({ title: cleanName, type: row.type }), desc: row.description || seedDescFor(cleanName), on: row.is_active !== false, sessions: [], files: [] };
   (sessRows || []).filter(function(s){ return s.item_id === row.id; })
     .sort(function(a, b){ return new Date(a.starts_at) - new Date(b.starts_at); })
     .forEach(function(s){ it.sessions.push({ id: s.id, date: new Date(s.starts_at), time: timeRange(s.starts_at, mins, s.ends_at), total: s.capacity, booked: Math.max(0, s.capacity - s.remaining), focus: s.focus || '', note: s.note || s.content || '', files: [] }); });
@@ -3646,7 +3666,9 @@ var EN_EXACT = {
 '一组家庭一大一小。用游戏的方式认识节奏，亲子合奏一首小曲子带回家。建议孩子 5 岁以上。':'One family per group — one adult and one child. Discover rhythm through games, and play a little parent-child duet together to take home. Recommended for children aged 5 and up.',
 '按需预约（on-demand），不在每周固定课表里：先选一个开放时段，想约其他时间直接联系店主。内容按你的进度定制：选调、曲目练习、录制前的细节打磨都可以在这一节里解决，请提前在备注里写下想练的内容。':'On-demand — not on the weekly schedule. Pick an open slot first, or contact the owner directly for another time. The session is tailored to your progress: choosing a scale, repertoire practice, or polishing details before a recording. Please write what you want to work on in the booking notes.',
 '这是馆内唯一的空间，所有课程、活动和租用都在这里进行。挑高木地板，声场为手碟与原声乐器调过。含 10 台手碟借用、音响与茶水，适合工作坊、小型演出与录制。自选日期与时段，按小时计费；课程 / 活动已占用的时段会自动避开。':'This is the studio\u2019s only space — every class, event and rental happens here. High ceilings and wood floors, with acoustics tuned for handpan and acoustic instruments. Includes use of 10 handpans, a sound system and tea — great for workshops, small performances and recording. Pick your own date and time, billed by the hour; times already taken by classes or events are blocked automatically.',
-'十周系统课，每周同一时间，一节一个重点，循序渐进从零到能完整合奏。一次报名锁定全部 10 节，时间和每节 focus 都排好了。':'A ten-week systematic course at the same time every week — one focus per lesson, progressing step by step from zero to playing a full ensemble piece. One enrollment locks in all 10 lessons, with times and each lesson\u2019s focus already scheduled.'
+'十周系统课，每周同一时间，一节一个重点，循序渐进从零到能完整合奏。一次报名锁定全部 10 节，时间和每节 focus 都排好了。':'A ten-week systematic course at the same time every week — one focus per lesson, progressing step by step from zero to playing a full ensemble piece. One enrollment locks in all 10 lessons, with times and each lesson\u2019s focus already scheduled.',
+'按你的进度定制：选调、曲目练习、录制前的细节打磨都可以在这一节里解决。请提前在备注里写下想练的内容。':'Tailored to your progress: choosing a scale, repertoire practice, or polishing details before a recording — all in one session. Please write what you want to work on in the booking notes.',
+'挑高木地板主厅，声场为手碟与原声乐器调过。含 10 台手碟借用、音响与茶水，适合工作坊、小型演出与录制。自选日期与时段，按小时计费。':'A high-ceilinged main hall with wood floors, its acoustics tuned for handpan and acoustic instruments. Includes use of 10 handpans, a sound system and tea — great for workshops, small performances and recording. Pick your own date and time, billed by the hour.'
 };
 var EN_MAP = {
 /* 课程 / 场地名（真实课表英文名） */
@@ -3660,7 +3682,7 @@ var EN_MAP = {
 /* 顶部 / Hero / 快捷入口 */
 '手碟馆':'Handpan Studio','听见手碟的共鸣':'Feel the Resonance','网页版 · BELLEVUE':'WEB · BELLEVUE','每周固定课表：手碟、瑜伽与普拉提课程，还有空间租用，全部在这里预约——选场次、填手机号、在线付款。':'Handpan, yoga, and Pilates every week, plus studio rental. Pick a time, book, and pay online.','手碟课':'Handpan','瑜伽课':'Yoga','普拉提课':'Pilates Classes','体验 · 零基础 · 进阶':'Trial · Beginner · Advanced','流瑜伽 · 阿汤 · Cross Mat':'Vinyasa · Ashtanga · Cross Mat','租空间':'Studio Rental','$80 / 小时 · 自选时段':'$80 / hour · Pick your time','登录 / 注册':'Log in / Sign up','用邮箱 + 密码登录或注册':'Log in or sign up with email + password','已登录：':'Logged in as ','点这里看我的信息':' — tap to view My Info',
 /* 本周课表 */
-'本周课表':'Weekly Schedule','下周课表':'Next Week','上周课表':'Last Week','课表':'Schedule','点一下展开，看本周每天有什么课':'See this week\u2019s classes','点一下展开看每天的课':'Tap to expand and see each day\u2019s classes','点一下展开':'Tap to expand','展开':'Expand','收起':'Collapse','上一周':'← Prev week','下一周 →':'Next week →','下一周':'Next week','上一周的课表':'Previous week schedule','看上一周的课表':'View last week\u2019s schedule','看下一周的课表':'View next week\u2019s schedule','切换周':'Switch week','回到本周':'Back to this week','本周':'This week','下周':'Next week','上周':'Last week','周后':'weeks later','周前':'weeks ago','暂时没有排课':'No classes scheduled','暂时没有课':'No classes for now','暂无课程':'No classes scheduled','这一周暂时没有课':'No classes this week','这天没有课':'No classes this day','点任意一节课，直接去约那一节（约课时再登录就行，看课表不用登录）。空间租用不在周课表里，在下面目录里自选时段。':'Tap a class to book it — no account needed to browse. For studio rental, pick a time under Booking below.','去约 ›':'Book ›','团课整套报名':'Full package enrollment','已约满':'Fully booked',
+'本周课表':'Weekly Schedule','下周课表':'Next Week','上周课表':'Last Week','课表':'Schedule','点一下展开，看本周每天有什么课':'See this week\u2019s classes','点一下展开看每天的课':'Tap to expand and see each day\u2019s classes','点一下展开':'Tap to expand','展开':'Expand','收起':'Collapse','上一周':'Prev week','下一周 →':'Next week →','下一周':'Next week','上一周的课表':'Previous week schedule','看上一周的课表':'View last week\u2019s schedule','看下一周的课表':'View next week\u2019s schedule','切换周':'Switch week','回到本周':'Back to this week','本周':'This week','下周':'Next week','上周':'Last week','周后':'weeks later','周前':'weeks ago','暂时没有排课':'No classes scheduled','暂时没有课':'No classes for now','暂无课程':'No classes scheduled','这一周暂时没有课':'No classes this week','这天没有课':'No classes this day','点任意一节课，直接去约那一节（约课时再登录就行，看课表不用登录）。空间租用不在周课表里，在下面目录里自选时段。':'Tap a class to book it — no account needed to browse. For studio rental, pick a time under Booking below.','去约 ›':'Book ›','团课整套报名':'Full package enrollment','已约满':'Fully booked',
 /* 目录 */
 '预约目录':'Booking','价格均为美金（USD）。网页版经 Stripe 在线支付，支持信用卡、Apple Pay、Google Pay，也可以用钱包余额付款。下单先占位 15 分钟，付款成功才算约好；没付完名额会自动释放。店主端上架或改价，这里立刻同步。':'Prices in USD. Pay by card, Apple Pay, Google Pay, or wallet balance. We hold your spot for 15 minutes — your booking is confirmed once payment goes through.','价格均为美金（USD），在线支付或钱包余额均可。下单先占位 15 分钟，付款成功才算约好。':'Prices in USD. Pay online or with your wallet balance. We hold your spot for 15 minutes — your booking is confirmed once payment goes through.','全部':'All','分类':'Category','这个分类下暂时没有上架项目。':'Nothing is listed in this category yet.','最近场次':'Next session','最近一场已约满，点开看其他场次':'The next session is full — open to see other sessions','暂无场次，请留意店主端新增':'No sessions yet — watch for new ones from the owner','自选日期与时段 · 每天':'Pick your date & time · Open daily ','可约':'for booking','课程 / 活动占用的时段会自动避开':'Times taken by classes / events are blocked automatically','整套还剩':'Only ','本期已报满':'This round is fully booked','共':'Total ','点「报名」看全部时间与每节 focus':'Tap “Enroll” to see all dates and each lesson\u2019s focus','报名':'Enroll','预约':'Book','配图':' image',
 /* 标签 / 单位 / 状态 */
@@ -3676,21 +3698,21 @@ var EN_MAP = {
 /* 预约成功 / 取消 */
 '预约成功':'Booking Confirmed','已用钱包余额付款，余额剩':'Paid from your wallet balance. Balance left: ','。':'','付款已确认，确认信息会发到你的手机。':'Payment confirmed — a confirmation will be sent to your phone.','到店出示预约号即可。':'Just show your booking code at the studio.','项目':'Item','时间':'Time','节数':'Lessons','全部安排见「我的预约」':'See “My Bookings” for the full schedule','时长':'Duration','人数':'People','租用':'Rental ','预约号':'Booking code ','查看我的预约':'View my bookings','回到目录':'Back to Booking','取消预约':'Cancel booking','整套取消':'Cancel full package','团课号':'Package code ','团课 · 已报名':'Package · Enrolled',
 /* 登录 / 注册 */
-'登录':'Log in','注册':'Sign up','注册新账号':'Create an account','注册并登录':'Sign up & log in','登录中…':'Logging in…','注册中…':'Signing up…','用邮箱 + 密码登录。预约目录不用登录就能看；「我的」、店主端和老师工作台要登录后按身份才能进。注册后默认是顾客，老师 / 店主身份由店主在店主端改。':'Log in with your email and password. Browsing is open to everyone; My Page, the owner dashboard, and the teacher studio need an account. New accounts start as customers.','登录或注册':'Log in or sign up','邮箱':'Email','密码':'Password','至少 6 位':'At least 6 characters','先逛逛目录':'Browse the catalog first','手机号短信验证码登录以后再加（需要接短信服务商）；现在网页版先用邮箱 + 密码。':'SMS code login will come later (it needs an SMS provider); for now the web version uses email + password.','请填正确的邮箱。':'Please enter a valid email address.','密码至少 6 位。':'Password must be at least 6 characters.','邮箱或密码不对。如果还没注册，先点上面的「注册」。':'Wrong email or password. If you haven\u2019t signed up yet, tap “Sign up” above first.','这个邮箱已经注册过了，直接登录就行。':'This email is already registered — just log in.','注册成功。如果暂时登不进去，是邮箱确认还没完成——查一下邮箱点确认链接，再回来登录。':'Signed up. If you can\u2019t log in yet, your email confirmation is pending — check your inbox, tap the confirmation link, then come back and log in.','登录没返回会话，请稍后再试':'Login didn\u2019t return a session — please try again later','登录失败':'Login failed','登录成功，你的身份是':'Logged in — your role is ','登录成功（店主）。底部已出现「管理」tab，点它进店主端':'Logged in as owner. The “Admin” tab is now at the bottom — tap it to open the owner dashboard','登录成功（老师）。底部已出现「工作台」tab，点它进老师工作台':'Logged in as teacher. The “Studio” tab is now at the bottom — tap it to open the teacher studio','已退出登录。目录还能继续看，「我的」需要重新登录。':'Logged out. You can keep browsing; My Page needs a new login.','先登录才能看这一页，目录不用登录':'Please log in to view this page — the catalog needs no login','约课前先登录一下，登录完留在目录，重新点「预约」就行':'Please log in first — after that, just tap Book again.',
+'登录':'Log in','注册':'Sign up','注册新账号':'Create an account','注册并登录':'Sign up & log in','登录中…':'Logging in…','注册中…':'Signing up…','用邮箱 + 密码登录。预约目录不用登录就能看；「我的」、店主端和老师工作台要登录后按身份才能进。注册后默认是顾客，老师 / 店主身份由店主在店主端改。':'Log in with your email and password. Browsing is open to everyone; My Page, the owner dashboard, and the teacher studio need an account. New accounts start as customers.','登录或注册':'Log in or sign up','邮箱':'Email','密码':'Password','至少 6 位':'At least 6 characters','先逛逛目录':'Browse the catalog first','手机号短信验证码登录以后再加（需要接短信服务商）；现在网页版先用邮箱 + 密码。':'SMS code login will come later (it needs an SMS provider); for now the web version uses email + password.','请填正确的邮箱。':'Please enter a valid email address.','密码至少 6 位。':'Password must be at least 6 characters.','邮箱或密码不对。如果还没注册，先点上面的「注册」。':'Wrong email or password. If you haven\u2019t signed up yet, tap “Sign up” above first.','这个邮箱已经注册过了，直接登录就行。':'This email is already registered — just log in.','注册成功。如果暂时登不进去，是邮箱确认还没完成——查一下邮箱点确认链接，再回来登录。':'Signed up. If you can\u2019t log in yet, your email confirmation is pending — check your inbox, tap the confirmation link, then come back and log in.','登录没返回会话，请稍后再试':'Login didn\u2019t return a session — please try again later','登录失败':'Login failed','登录成功，你的身份是':'Logged in — your role is ','登录成功（店主）。底部已出现「管理」tab，点它进店主端':'Logged in as owner. The “Manage” tab is now at the bottom — tap it to open the owner dashboard','登录成功（老师）。底部已出现「工作台」tab，点它进老师工作台':'Logged in as teacher. The “Studio” tab is now at the bottom — tap it to open the teacher studio','已退出登录。目录还能继续看，「我的」需要重新登录。':'Logged out. You can keep browsing; My Page needs a new login.','先登录才能看这一页，目录不用登录':'Please log in to view this page — the catalog needs no login','约课前先登录一下，登录完留在目录，重新点「预约」就行':'Please log in first — after that, just tap Book again.',
 /* 身份 / 角色 */
 '店主':'Owner','老师':'Teacher','顾客':'Customer','身份':'Role','店主 admin':'Owner (admin)','老师 teacher':'Teacher (teacher)','顾客 customer':'Customer (customer)',
 /* 店主入口 / 老师入口 gates */
 '店主入口':'Owner Entrance','店主端只对店主账号开放。请先用店主邮箱登录，登录后系统按你的身份（profiles 里的 role）判断能不能进，不是输口令。':'Owner accounts only. Log in with the owner email — access is based on your account role, not a passcode.','去登录':'Go to log in','取消':'Cancel','老师入口':'Teacher Entrance','老师工作台只对老师账号开放。请先用你的老师邮箱登录，登录后只会看到你自己教的课（按 profiles 里的老师名字认课）。':'Teacher accounts only. Log in with your teacher email — you will see just the classes you teach.',
 /* 店主端锁定 / 重验 */
-'店主端已锁定':'Owner Dashboard Locked','你刚才已退出店主端并锁定。当前登录账号是':'You just exited and locked the owner dashboard. The current account is ','（店主），重新进入店主端前，要再输一次这个账号的密码验证身份——锁定后点「管理」tab 不会直接放行。':' (owner). Before re-entering, enter this account\u2019s password once more to verify it\u2019s you — after locking, tapping the “Admin” tab will not let you straight in.','店主账号密码':'Owner account password','输入当前账号的密码':'Enter the current account\u2019s password','请输入密码。':'Please enter your password.','验证并进入店主端':'Verify & enter owner dashboard','验证中…':'Verifying…','取消（保持锁定）':'Cancel (stay locked)','密码不对，店主端保持锁定。':'Wrong password — the owner dashboard stays locked.','验证没通过，请重新输入密码':'Verification failed — please re-enter your password','验证失败':'Verification failed','这个账号现在的身份不是店主，进不了店主端。':'This account\u2019s role is no longer owner, so it can\u2019t enter the owner dashboard.','现在没连上数据库，没法验证密码，店主端保持锁定。连上后再试。':'The database isn\u2019t connected right now, so the password can\u2019t be verified and the owner dashboard stays locked. Try again once connected.','验证通过，已重新进入店主端':'Verified — welcome back to the owner dashboard','已退出店主端并锁定。再进店主端要点「管理」tab 并重新输密码验证。':'Exited and locked the owner dashboard. To re-enter, tap the “Admin” tab and verify with your password again.','退出店主端并锁定':'Exit & lock owner dashboard',
+'店主端已锁定':'Owner Dashboard Locked','你刚才已退出店主端并锁定。当前登录账号是':'You just exited and locked the owner dashboard. The current account is ','（店主），重新进入店主端前，要再输一次这个账号的密码验证身份——锁定后点「管理」tab 不会直接放行。':' (owner). Before re-entering, enter this account\u2019s password once more to verify it\u2019s you — after locking, tapping the “Manage” tab will not let you straight in.','店主账号密码':'Owner account password','输入当前账号的密码':'Enter the current account\u2019s password','请输入密码。':'Please enter your password.','验证并进入店主端':'Verify & enter owner dashboard','验证中…':'Verifying…','取消（保持锁定）':'Cancel (stay locked)','密码不对，店主端保持锁定。':'Wrong password — the owner dashboard stays locked.','验证没通过，请重新输入密码':'Verification failed — please re-enter your password','验证失败':'Verification failed','这个账号现在的身份不是店主，进不了店主端。':'This account\u2019s role is no longer owner, so it can\u2019t enter the owner dashboard.','现在没连上数据库，没法验证密码，店主端保持锁定。连上后再试。':'The database isn\u2019t connected right now, so the password can\u2019t be verified and the owner dashboard stays locked. Try again once connected.','验证通过，已重新进入店主端':'Verified — welcome back to the owner dashboard','已退出店主端并锁定。再进店主端要点「管理」tab 并重新输密码验证。':'Exited and locked the owner dashboard. To re-enter, tap the “Manage” tab and verify with your password again.','退出店主端并锁定':'Exit & lock owner dashboard',
 /* 个人资料 sheet */
 '填一次就行：以后预约时姓名和手机号会自动带入，不用每次重填。手机号是认人的关键，你的预约、上课记录和钱包余额都会按这个手机号归到你名下。':'Fill it in once: your name and phone will be filled in automatically for future bookings. Your phone number is the identity key — your bookings, class history and wallet balance are all filed under it.','保存资料':'Save profile','资料已保存，预约时会自动带入':'Profile saved — it will be filled in automatically when you book','请填写姓名':'Please enter your name','请填写手机号，这是认人的关键':'Please enter your phone number — it\u2019s the identity key',
 /* 场次编辑 sheet */
 '编辑这一节课':'Edit This Lesson','本节 focus（这节课的重点）':'This lesson\u2019s focus','如：双手配合与律动':'e.g. Two-hand coordination & groove','本节介绍（要讲什么）':'About this lesson (what it covers)','这节课会讲什么、练什么，报了这节课的学员会看到':'What this lesson will teach and practise — students booked into it will see this','本节课件':'This lesson\u2019s materials','＋ 上传新课件':'+ Upload new material','保存这一节':'Save this lesson','课件已挂到这一节，学员那边就能看到':'Material attached to this lesson — students can see it now','课件已替换成新文件':'Material replaced with the new file','课件已从这一节删除':'Material removed from this lesson','这一节的内容已更新，学员看到的就是新内容和新课件':'This lesson has been updated — students now see the new content and materials','这一节还没有课件。上传后，报了这节课的学员能在自己的预约和上课记录里打开。':'This lesson has no materials yet. After uploading, students booked into it can open them from their bookings and class history.','替换':'Replace','删除':'Delete',
 /* 店主端通用 */
-'店主工作台':'Owner Dashboard','先看今天，再处理名单、营收和上架。':'Today at a glance, then rosters, revenue, and listings.','今天是':'Today is ','。先看今天，再处理名单、营收和上架。':'. Start with today, then handle rosters, revenue and listings.','日历':'Calendar','预约名单':'Rosters','营收':'Revenue','管理':'Admin','客户充值':'Top-ups','账号权限':'Accounts','店主端功能':'Owner dashboard sections','本月营收（USD）':'Revenue this month (USD)','已付 + 待付合计':'Paid + unpaid combined','共':'','单有效预约':' active bookings','今日场次':'Today\u2019s sessions','场 · 已约':' sessions · ','人':' people','待付款（占位未付）':'Awaiting payment (held, unpaid)','单 ·':' bookings · ','无':'None','＋ 新增场次':'+ Add session','＋ 上架新项目':'+ List new item','看待付款名单':'View unpaid rosters','预约名单和营收数据暂时读不到：数据库读取 bookings / customers 时被拒绝。课程、场次、日历和改价都正常；名单与营收等数据库恢复读取后会重新显示，不是没有预约。':'Rosters and revenue can\u2019t be read right now: the database refused the bookings / customers read. Courses, sessions, the calendar and repricing all work; rosters and revenue will reappear once database reads recover — it does not mean there are no bookings.',
+'店主工作台':'Owner Dashboard','先看今天，再处理名单、营收和上架。':'Today at a glance, then rosters, revenue, and listings.','今天是':'Today is ','。先看今天，再处理名单、营收和上架。':'. Start with today, then handle rosters, revenue and listings.','日历':'Calendar','预约名单':'Rosters','营收':'Revenue','管理':'Manage','客户充值':'Top-ups','账号权限':'Accounts','店主端功能':'Owner dashboard sections','本月营收（USD）':'Revenue this month (USD)','已付 + 待付合计':'Paid + unpaid combined','共':'','单有效预约':' active bookings','今日场次':'Today\u2019s sessions','场 · 已约':' sessions · ','人':' people','待付款（占位未付）':'Awaiting payment (held, unpaid)','单 ·':' bookings · ','无':'None','＋ 新增场次':'+ Add session','＋ 上架新项目':'+ List new item','看待付款名单':'View unpaid rosters','预约名单和营收数据暂时读不到：数据库读取 bookings / customers 时被拒绝。课程、场次、日历和改价都正常；名单与营收等数据库恢复读取后会重新显示，不是没有预约。':'Rosters and revenue can\u2019t be read right now: the database refused the bookings / customers read. Courses, sessions, the calendar and repricing all work; rosters and revenue will reappear once database reads recover — it does not mean there are no bookings.',
 /* 日历 */
-'本月':'This month','上月':'← Prev','下月 →':'Next →','今天':'Today','有空位':'Spots open','已满':'Full','点任意一天看当天安排':'Tap any day to see its schedule','近期场次 · 未来 7 天':'Coming up · Next 7 days','未来 7 天没有场次，去「管理」tab 新增一场吧。':'No sessions in the next 7 days — add one in the Admin tab.','这天没有安排场次，工作室空闲。':'Nothing scheduled this day — the studio is free.','给这天新增场次':'Add a session for this day','名单':'Roster','场':' sessions','已约':'Booked ','还剩':'left ','给它加场次':'Add a session',
+'本月':'This month','上月':'← Prev','下月 →':'Next →','今天':'Today','有空位':'Spots open','已满':'Full','点任意一天看当天安排':'Tap any day to see its schedule','近期场次 · 未来 7 天':'Coming up · Next 7 days','未来 7 天没有场次，去「管理」tab 新增一场吧。':'No sessions in the next 7 days — add one in the Manage tab.','这天没有安排场次，工作室空闲。':'Nothing scheduled this day — the studio is free.','给这天新增场次':'Add a session for this day','名单':'Roster','场':' sessions','已约':'Booked ','还剩':'left ','给它加场次':'Add a session',
 /* 名单 */
 '点开一场看谁约了、几个人、付没付；每场和全部名单都能一键导出 CSV。待付款的会标出来，方便跟进。':'Tap a session to see who\u2019s booked and whether they\u2019ve paid. Export any roster as CSV.','全部场次':'All sessions','只看有预约的':'Only sessions with bookings','导出全部名单（CSV）':'Export all rosters (CSV)','全部预约记录':'All booking records','暂无有效预约。':'No active bookings.','没有符合条件的场次。':'No sessions match.','这一场还没有人预约。':'Nobody has booked this session yet.','本场小计':'Session subtotal ','单':' bookings','待付':' unpaid','导出本场名单':'Export this roster','预约号':'Booking code ','已付':'Paid','待付款':'Awaiting payment','全部学员名单.csv':'All-rosters.csv','已导出全部学员名单（':'Exported all rosters (','已导出「':'Exported “','」本场学员名单（':'” roster for this session (','单）':' bookings)','这一场还没有人预约，没有可导出的名单':'Nobody has booked this session yet — nothing to export','暂无有效预约可导出':'No active bookings to export','学员名单.csv':'-roster.csv',
 /* 营收 */
@@ -3740,7 +3762,9 @@ Object.assign(EN_MAP, {
 '馆内唯一':"the studio's only",
 '馆里提供':"provided by the studio",
 '你的进度':"your pace",
-'定制':"tailored"
+'定制':"tailored",
+' 起 · 每周同一时间':' · Same time every week',
+'（':' (','）':')'
 });
 var EN_KEYS = Object.keys(EN_MAP).sort(function(a,b){ return b.length - a.length; });
 var EN_PATTERNS = [
@@ -3782,7 +3806,7 @@ function hasCJK(s){ return /[\u4e00-\u9fff]/.test(s || ''); }
 function translateString(s){
   if(!s || !hasCJK(s)) return s;
   var trimmed = s.trim();
-  if(EN_EXACT[trimmed]) return s.replace(trimmed, EN_EXACT[trimmed]).replace(/’/g, "'").replace(/“/g, '"').replace(/”/g, '"');
+  if(EN_EXACT[trimmed]) s = s.replace(trimmed, EN_EXACT[trimmed]); /* 不提前返回：继续走下面的清洗（去简介英文名前缀、折叠重复标题、全角标点转半角） */
   var out = s;
   /* 先换长词组（>=4 字），避免数字规则把整句词组打断；再跑数字/日期规则；最后补短词与单字兜底 */
   for(var a = 0; a < EN_KEYS.length; a++){
@@ -3801,6 +3825,8 @@ function translateString(s){
   out = out.replace(/([a-z])(\d)/g, '$1 $2').replace(/(\d)([a-z])/g, '$1 $2').replace(/([a-z]{3,})([A-Z][a-z])/g, '$1 $2');
   /* 课程简介自带英文名前缀，和卡片标题重复，英文版去掉前缀只留正文 */
   out = out.replace(/^(Handpan Trial|Handpan Beginner|Handpan Foundation|Handpan Advanced|Handpan Repertoire|Vinyasa Flow Yoga|Ashtanga Guided Practice|Cross Mat Yoga|Mat Pilates)\s*·\s*/, '');
+  /* 标题类短语若因数据源里中英并存而翻重了（如 Handpan Foundation Handpan Foundation），折叠成一份 */
+  ['Handpan Trial','Handpan Beginner','Handpan Foundation','Handpan Advanced','Handpan Repertoire','Vinyasa Flow Yoga','Ashtanga Guided Practice','Cross Mat Yoga','Mat Pilates','Parent-Child Handpan Workshop','Handpan System Package'].forEach(function(nm){ var dup = nm + ' ' + nm; while(out.indexOf(dup) >= 0) out = out.split(dup).join(nm); });
   out = out.replace(/\b(bookings|sessions|lessons) Book\b/g, '$1');
   out = out.replace(/，/g, ', ').replace(/：/g, ': ').replace(/；/g, '; ').replace(/。/g, '. ');
   out = out.replace(/\s{2,}/g, ' ').replace(/\s+([,.;:!?])/g, '$1');
