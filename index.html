@@ -421,6 +421,10 @@ button.week-row:active{ background:var(--paper2); }
 .week-nav .wnav-m small{ font-size:11px; color:var(--ink2); display:block; margin-top:1px; }
 .week-back{ text-align:center; padding:9px 0 1px; }
 .week-back button{ font-size:12px; font-weight:800; color:var(--brass); padding:4px 10px; }
+
+.langswitch{ display:flex; align-items:center; background:rgba(255,255,255,.55); border:1px solid var(--line); border-radius:999px; padding:2px; flex:none; }
+.langswitch button{ padding:4px 11px; border-radius:999px; font-size:11.5px; font-weight:800; color:var(--ink2); line-height:1.2; white-space:nowrap; }
+.langswitch button.on{ background:var(--ink); color:#f5efe0; }
 </style>
 </head>
 <body>
@@ -428,6 +432,7 @@ button.week-row:active{ background:var(--paper2); }
   <div class="phone" id="phone">
     <div class="statusbar">
       <span id="clock">9:41</span>
+      <span class="langswitch" role="group" aria-label="Language / 语言切换"><button type="button" id="langBtnZh" onclick="setLang('zh')">中文</button><button type="button" id="langBtnEn" onclick="setLang('en')">English</button></span>
       <span class="capsule"><i></i><i></i><i></i><span class="ring"></span></span>
     </div>
     <div class="apphead">
@@ -3407,5 +3412,279 @@ updateAuthBtn();
 applyRoute();
 initApp();
 </script>
+<script>
+/* ================= 全站双语（中文 / English） =================
+   规则：默认中文；?lang=en|zh 指定语言优先，其次用上次记住的选择（localStorage etern-lang），都没有才中文。
+   切换是全局的：目录、我的、预约流程、店主端、老师工作台、所有按钮与提示一起换；
+   切换时同步改地址栏 ?lang=，复制当前链接发给别人，对方打开就是同一语言。
+   实现：界面文案先按中文生成，再由本层统一翻译（含动态渲染与提示气泡，MutationObserver 盯住新内容）；
+   切回中文时恢复原文并重绘。课程名用真实课表自带的英文名。 */
+var LANG = (function(){
+  try{
+    var q = new URLSearchParams(location.search).get('lang');
+    if(q === 'en' || q === 'zh'){ try{ localStorage.setItem('etern-lang', q); }catch(e){} return q; }
+    var saved = null; try{ saved = localStorage.getItem('etern-lang'); }catch(e){}
+    if(saved === 'en' || saved === 'zh') return saved;
+  }catch(e){}
+  return 'zh';
+})();
+var MONTHS_EN = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+var MON_EN = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+var WD_EN = {'一':'Mon','二':'Tue','三':'Wed','四':'Thu','五':'Fri','六':'Sat','日':'Sun'};
+var EN_EXACT = {
+'手碟馆预约 · 网页版 — ETERN.III':'ETERN.III Handpan Studio · Book Online',
+'预约目录 · ETERN.III 手碟馆':'Catalog · ETERN.III Handpan Studio',
+'我的 · ETERN.III 手碟馆':'My Page · ETERN.III Handpan Studio',
+'店主工作台 · ETERN.III 手碟馆':'Owner Dashboard · ETERN.III Handpan Studio',
+'老师工作台 · ETERN.III 手碟馆':'Teacher Studio · ETERN.III Handpan Studio',
+'ETERN.III 手碟馆':'ETERN.III Handpan Studio',
+'Handpan Trial · 第一次接触手碟就选这节：认识音阶、基础敲击与呼吸节奏，课结束能弹出一小段旋律。乐器由馆里提供，零基础友好。每周六、周日各一场。':'Handpan Trial · Perfect for your first handpan experience: scales, basic striking and breathing rhythm — you will play a short melody by the end. Instruments are provided and it is beginner-friendly. Every Saturday and Sunday.',
+'Handpan Beginner · 从零开始系统学手碟：音阶、敲击手法与简单旋律，循序渐进打好基础。乐器由馆里提供。每周三晚固定开课。':'Handpan Beginner · A systematic start from zero: scales, striking technique and simple melodies, building solid foundations step by step. Instruments are provided. Every Wednesday evening.',
+'Handpan Foundation · 打稳基本功：常用节奏型、双手配合与律动练习，适合上过零基础班、想继续进阶的学员。每周四晚固定开课。':'Handpan Foundation · Build solid fundamentals: common rhythm patterns, two-hand coordination and groove practice. For students who have finished the Beginner class. Every Thursday evening.',
+'Handpan Advanced · 复合节奏、即兴表达与合奏训练，适合已有基础、想提升演奏表现力的学员。每周一晚固定开课。':'Handpan Advanced · Complex rhythms, improvisation and ensemble training, for players with a foundation who want more expression in their playing. Every Monday evening.',
+'Handpan Repertoire · 一节课打磨一首曲目：拆解、慢练到完整演奏，慢慢积累自己的曲目库。每周二上午固定开课。':'Handpan Repertoire · Polish one piece per class: break it down, practise slowly, then play it in full — and grow your own repertoire over time. Every Tuesday morning.',
+'Vinyasa Flow Yoga · 呼吸带动体式串联，流动中唤醒身体。周一早晨 75 分钟场，周六下午 60 分钟场，所有水平可参加。':'Vinyasa Flow Yoga · Breath-led flowing sequences that awaken the body as you move. Monday morning is a 75-minute class, Saturday afternoon 60 minutes. All levels welcome.',
+'Ashtanga Guided Practice · 老师口令带领完整序列，按自己的呼吸节奏跟练，适合想建立规律练习的学员。每周三下午固定开课。':'Ashtanga Guided Practice · The teacher calls the full sequence while you follow at your own breath pace — ideal for building a regular practice. Every Wednesday afternoon.',
+'Cross Mat Yoga · 寰宇瑜伽垫上练习，结合流动串联与力量稳定，周六上午一场 90 分钟完整练习。':'Cross Mat Yoga · A mat practice combining flowing sequences with strength and stability — one full 90-minute session on Saturday mornings.',
+'Mat Pilates · 垫上核心训练：呼吸、控制与身体排列，小班带领，适合所有水平。每周五上午固定开课。':'Mat Pilates · Mat-based core training: breath, control and body alignment, led in a small group. Suitable for all levels. Every Friday morning.',
+'躺下来听就好。手碟、颂钵与雨棍层层铺开，适合一周忙完想彻底放松的人。请提前 10 分钟到场，馆里提供垫子与毯子。':'Just lie back and listen. Handpan, singing bowls and rain sticks layer into a deep soundscape — perfect when you want to fully unwind after a busy week. Please arrive 10 minutes early; mats and blankets are provided.',
+'一组家庭一大一小。用游戏的方式认识节奏，亲子合奏一首小曲子带回家。建议孩子 5 岁以上。':'One family per group — one adult and one child. Discover rhythm through games, and play a little parent-child duet together to take home. Recommended for children aged 5 and up.',
+'按需预约（on-demand），不在每周固定课表里：先选一个开放时段，想约其他时间直接联系店主。内容按你的进度定制：选调、曲目练习、录制前的细节打磨都可以在这一节里解决，请提前在备注里写下想练的内容。':'On-demand — not on the weekly schedule. Pick an open slot first, or contact the owner directly for another time. The session is tailored to your progress: choosing a scale, repertoire practice, or polishing details before a recording. Please write what you want to work on in the booking notes.',
+'这是馆内唯一的空间，所有课程、活动和租用都在这里进行。挑高木地板，声场为手碟与原声乐器调过。含 10 台手碟借用、音响与茶水，适合工作坊、小型演出与录制。自选日期与时段，按小时计费；课程 / 活动已占用的时段会自动避开。':'This is the studio\u2019s only space — every class, event and rental happens here. High ceilings and wood floors, with acoustics tuned for handpan and acoustic instruments. Includes use of 10 handpans, a sound system and tea — great for workshops, small performances and recording. Pick your own date and time, billed by the hour; times already taken by classes or events are blocked automatically.',
+'十周系统课，每周同一时间，一节一个重点，循序渐进从零到能完整合奏。一次报名锁定全部 10 节，时间和每节 focus 都排好了。':'A ten-week systematic course at the same time every week — one focus per lesson, progressing step by step from zero to playing a full ensemble piece. One enrollment locks in all 10 lessons, with times and each lesson\u2019s focus already scheduled.'
+};
+var EN_MAP = {
+/* 课程 / 场地名（真实课表英文名） */
+'手碟体验课':'Handpan Trial','手碟零基础班':'Handpan Beginner','手碟基础班':'Handpan Foundation','手碟进阶班':'Handpan Advanced','手碟曲目':'Handpan Repertoire','流瑜伽':'Vinyasa Flow Yoga','阿汤领课':'Ashtanga Guided Practice','垫上普拉提':'Mat Pilates','寰宇 Cross Mat':'Cross Mat Yoga','寰宇瑜伽':'Cross Mat Yoga','主厅 · 共鸣空间':'Main Hall · Resonance Space','主厅':'Main Hall','周末声音浴 · 手碟与颂钵':'Weekend Sound Bath · Handpan & Singing Bowls','亲子手碟工作坊':'Parent-Child Handpan Workshop','一对一私教课':'1-on-1 Private Lesson','手碟系统团课 · 10 节进阶':'Handpan System Package · 10-Lesson Advanced','手碟系统团课':'Handpan System Package','声音浴 · 呼吸引导图（示例图）.webp':'Sound Bath · Breathing Guide (sample).webp',
+/* 老师 / 人名 */
+'林老师':'Teacher Lin','老师待定':'Teacher TBD','声音疗愈师 Mia':'Sound Healer Mia','馆主亲自授课':'Studio Owner','陈默':'Chen Mo','刘洋':'Liu Yang','孙悦':'Sun Yue','赵磊':'Zhao Lei','王小雨':'Wang Xiaoyu','林小满':'Lin Xiaoman','周子涵':'Zhou Zihan','郑瑶':'Zheng Yao','何佳':'He Jia','王芳':'Wang Fang','徐静':'Xu Jing',
+/* 团课每节 focus */
+'认识手碟与音阶':'Getting to Know the Handpan & Scales','基础敲击与节奏感':'Basic Striking & Sense of Rhythm','双手配合与律动':'Two-Hand Coordination & Groove','旋律线条与呼吸':'Melodic Lines & Breath','复合节奏入门':'Introduction to Complex Rhythms','和声与泛音':'Harmony & Overtones','即兴对话':'Improvisational Dialogue','合奏与聆听':'Ensemble Playing & Listening','曲目排练':'Repertoire Rehearsal','结业合奏与分享':'Final Ensemble & Sharing','循序渐进':'Step by step',
+/* 描述分句（数据库里的简介按分句翻译） */
+'第一次接触手碟就选这节：认识音阶、基础敲击与呼吸节奏，课结束能弹出一小段旋律':'Perfect for your first handpan experience: scales, basic striking and breathing rhythm — you will play a short melody by the end','乐器由馆里提供，零基础友好':'Instruments are provided; beginner-friendly','乐器由馆里提供':'Instruments are provided','每周六、周日各一场':'Every Saturday and Sunday','从零开始系统学手碟：音阶、敲击手法与简单旋律，循序渐进打好基础':'A systematic start from zero: scales, striking technique and simple melodies, building solid foundations step by step','每周三晚固定开课':'Every Wednesday evening','打稳基本功：常用节奏型、双手配合与律动练习，适合上过零基础班、想继续进阶的学员':'Build solid fundamentals: common rhythm patterns, two-hand coordination and groove practice — for students who finished the Beginner class and want to keep progressing','每周四晚固定开课':'Every Thursday evening','复合节奏、即兴表达与合奏训练，适合已有基础、想提升演奏表现力的学员':'Complex rhythms, improvisation and ensemble training, for players with a foundation who want more expression','每周一晚固定开课':'Every Monday evening','一节课打磨一首曲目：拆解、慢练到完整演奏，慢慢积累自己的曲目库':'Polish one piece per class: break it down, practise slowly, then play it in full — and grow your own repertoire','每周二上午固定开课':'Every Tuesday morning','呼吸带动体式串联，流动中唤醒身体':'Breath-led flowing sequences that awaken the body as you move','周一早晨 75 分钟场，周六下午 60 分钟场，所有水平可参加':'Monday morning is 75 minutes, Saturday afternoon 60 minutes; all levels welcome','老师口令带领完整序列，按自己的呼吸节奏跟练，适合想建立规律练习的学员':'The teacher calls the full sequence while you follow at your own breath pace — ideal for building a regular practice','每周三下午固定开课':'Every Wednesday afternoon','寰宇瑜伽垫上练习，结合流动串联与力量稳定，周六上午一场 90 分钟完整练习':'A mat practice combining flowing sequences with strength and stability — one full 90-minute session on Saturday mornings','垫上核心训练：呼吸、控制与身体排列，小班带领，适合所有水平':'Mat-based core training: breath, control and body alignment, led in a small group; suitable for all levels','每周五上午固定开课':'Every Friday morning','躺下来听就好':'Just lie back and listen','手碟、颂钵与雨棍层层铺开，适合一周忙完想彻底放松的人':'Handpan, singing bowls and rain sticks layer into a deep soundscape — perfect for fully unwinding after a busy week','请提前 10 分钟到场，馆里提供垫子与毯子':'Please arrive 10 minutes early; mats and blankets are provided','一组家庭一大一小':'One family per group — one adult and one child','用游戏的方式认识节奏，亲子合奏一首小曲子带回家':'Discover rhythm through games, and play a little parent-child duet together to take home','建议孩子 5 岁以上':'Recommended for children aged 5 and up','十周系统课，每周同一时间，一节一个重点，循序渐进从零到能完整合奏':'A ten-week systematic course at the same time every week — one focus per lesson, progressing step by step from zero to a full ensemble piece','一次报名锁定全部 10 节，时间和每节 focus 都排好了':'One enrollment locks in all 10 lessons, with times and each lesson\u2019s focus already scheduled','店主新上架的项目，详情到店咨询':'Newly listed by the owner — ask in the studio for details',
+/* 顶部 / Hero / 快捷入口 */
+'手碟馆':'Handpan Studio','听见手碟的共鸣':'Hear the Handpan Resonate','网页版 · BELLEVUE':'WEB · BELLEVUE','每周固定课表：手碟、瑜伽与普拉提课程，还有空间租用，全部在这里预约——选场次、填手机号、在线付款。':'A fixed weekly schedule of handpan, yoga and Pilates classes, plus space rental — book everything here: pick a session, enter your phone number, and pay online.','手碟课':'Handpan Classes','瑜伽课':'Yoga Classes','普拉提课':'Pilates Classes','体验 · 零基础 · 进阶':'Trial · Beginner · Advanced','流瑜伽 · 阿汤 · Cross Mat':'Vinyasa · Ashtanga · Cross Mat','租空间':'Rent the Space','$80 / 小时 · 自选时段':'$80 / hour · Pick your time','登录 / 注册':'Log in / Sign up','用邮箱 + 密码登录或注册':'Log in or sign up with email + password','已登录：':'Logged in as ','点这里看我的信息':' — tap to view My Info',
+/* 本周课表 */
+'本周课表':'This Week\u2019s Schedule','下周课表':'Next Week\u2019s Schedule','上周课表':'Last Week\u2019s Schedule','课表':'Schedule','点一下展开，看本周每天有什么课':'Tap to expand and see each day\u2019s classes','点一下展开看每天的课':'Tap to expand and see each day\u2019s classes','点一下展开':'Tap to expand','展开':'Expand','收起':'Collapse','上一周':'← Prev week','下一周 →':'Next week →','下一周':'Next week','上一周的课表':'Previous week schedule','看上一周的课表':'View last week\u2019s schedule','看下一周的课表':'View next week\u2019s schedule','切换周':'Switch week','回到本周':'Back to this week','本周':'This week','下周':'Next week','上周':'Last week','周后':'weeks later','周前':'weeks ago','暂时没有排课':'No classes scheduled','暂时没有课':'No classes for now','这一周暂时没有课':'No classes this week','这天没有课':'No classes this day','点任意一节课，直接去约那一节（约课时再登录就行，看课表不用登录）。空间租用不在周课表里，在下面目录里自选时段。':'Tap any class to book that session (you only need to log in when booking — browsing the schedule needs no login). Space rental is not in the weekly schedule; pick your time in the catalog below.','去约 ›':'Book ›','团课整套报名':'Full package enrollment','已约满':'Fully booked',
+/* 目录 */
+'预约目录':'Booking Catalog','价格均为美金（USD）。网页版经 Stripe 在线支付，支持信用卡、Apple Pay、Google Pay，也可以用钱包余额付款。下单先占位 15 分钟，付款成功才算约好；没付完名额会自动释放。店主端上架或改价，这里立刻同步。':'All prices are in USD. The web version takes payment online via Stripe — credit cards, Apple Pay and Google Pay — or pay from your wallet balance. Placing an order holds your spot for 15 minutes; the booking is confirmed only once payment succeeds, and unpaid holds release automatically. Anything the owner lists or reprices appears here right away.','全部':'All','分类':'Category','这个分类下暂时没有上架项目。':'Nothing is listed in this category yet.','最近场次':'Next session','最近一场已约满，点开看其他场次':'The next session is full — open to see other sessions','暂无场次，请留意店主端新增':'No sessions yet — watch for new ones from the owner','自选日期与时段 · 每天':'Pick your date & time · Open daily ','可约':'for booking','课程 / 活动占用的时段会自动避开':'Times taken by classes / events are blocked automatically','整套还剩':'Only ','本期已报满':'This round is fully booked','共':'Total ','点「报名」看全部时间与每节 focus':'Tap “Enroll” to see all dates and each lesson\u2019s focus','报名':'Enroll','预约':'Book','配图':' image',
+/* 标签 / 单位 / 状态 */
+'课程':'Class','活动':'Activity','空间':'Space','场地':'Venue','团课':'Package','手碟':'Handpan','瑜伽':'Yoga','普拉提':'Pilates','体验':'Trial','零基础':'Beginner','基础':'Foundation','进阶':'Advanced','曲目':'Repertoire','所有水平':'All levels','亲子':'Family','一对一':'1-on-1','整场租用':'Full-space rental','可容纳 30 人':'Fits up to 30 people','已确认':'Confirmed','已占位 · 待付款':'Held · Awaiting payment','已取消':'Cancelled','已上课':'Attended','未到场':'No-show','已上':'Done','待上':'Upcoming','已满':'Full','有空位':'Spots open','快满了（约满 70%）':'Almost full (70%+ booked)','快满了':'Almost full','上架中':'Live','已下架':'Unlisted','已付':'Paid','待付款':'Awaiting payment','待付':'Unpaid','就是你 · 当前登录账号':'This is you · Currently logged-in account','就是你':'This is you','未填写资料':'No profile info yet','还没填写':'Not filled in yet','未留姓名':'No name given',
+/* 我的页 */
+'我的预约':'My Bookings','我的钱包':'My Wallet','我的信息':'My Info','我的页面分区':'My page sections','返回预约目录':'← Back to catalog','← 返回预约目录':'← Back to catalog','这一页只有你自己的内容：预约、钱包和个人资料，不会出现课程目录。想约新课，点上面的返回按钮或底部「预约」回到目录页。':'This page shows only your own content: bookings, wallet and profile — no course catalog. To book something new, tap Back above or “Book” below to return to the catalog.','取消后名额立即释放回对应场次；到店出示预约号即可。':'Cancelling releases the spot back to that session right away; just show your booking code at the studio.','待上的预约':'Upcoming bookings','单待上':' upcoming','你还没有预约。':'You have no bookings yet.','只有你自己下的单会出现在这里，去看看本周的课程和活动吧。':'Only bookings you placed appear here. Go check out this week\u2019s classes and events.','去约一节课':'Book a class','上课记录':'Class history','共':'','次 · 按时间从近到远':' visits · Newest first','还没有上课记录。等你上完第一节课，这里会记下时间、老师和出勤。':'No class history yet. After your first class, the time, teacher and attendance will be recorded here.','我的课件':'My Materials','份 · 来自我约过和上过的课':' files · From classes you booked or attended','约课后这里会出现课件':'Materials will appear here after you book','还没有课件。等你约的课上传了课件，或者上完一节有课件的课，这里就能直接打开。':'No materials yet. Once a class you booked uploads materials — or you finish a class that has them — you can open them right here.','课程课件 · 老师已上传':'Course materials · Uploaded by the teacher','本节课件 · 老师已上传':'This lesson\u2019s materials · Uploaded by the teacher','课程课件':'Course materials','本节课件':'This lesson\u2019s materials','打开':'Open','文件':'File','图片':'Image','文档':'Document',
+/* 钱包 */
+'钱包余额':'Wallet Balance','充值后约课直接扣':'Top up and pay bookings directly','先填好个人资料（姓名 + 手机号），钱包就会按你的手机号归户，可以提前充值，约课时用余额付款。':'Fill in your profile first (name + phone). Your wallet is tied to your phone number, so you can top up in advance and pay for bookings from your balance.','先填资料':'Fill in profile first','约课时选「余额支付」直接扣这里的钱，扣完实时更新；用余额付的预约取消后，钱自动退回这里。':'Choose “Pay with balance” when booking and the money is deducted here, updated in real time. If you cancel a balance-paid booking, the money returns here automatically.','充值':'Top up','最近流水':'Recent activity','还没有充值或消费记录。':'No top-ups or spending yet.','自己充值':'Self top-up','店主代充':'Owner top-up','余额支付':'Pay with balance','取消退款':'Cancellation refund','余额':'Balance','现金':'Cash','线下转账':'Bank transfer','其他方式':'Other','其他':'Other','微信支付':'WeChat Pay',
+/* 个人资料 / 账号卡 */
+'个人资料':'Profile','按手机号认人':'Identified by phone number','姓名：':'Name: ','手机号：':'Phone: ','填一次就行：以后预约时姓名和手机号会自动带入。你的预约、上课记录和钱包余额都按这个手机号归到你名下。':'Fill it in once: your name and phone will be filled in automatically for future bookings. Your bookings, class history and wallet balance are all tied to this phone number.','ETERN.III 手碟馆会员':'ETERN.III Handpan Studio member','修改资料':'Edit profile','填写资料':'Fill in profile','编辑资料':'Edit profile','待上预约':' upcoming bookings','登录账号':'Login account','身份按 profiles 表里的 role 算：顾客只看自己的，老师看自己教的课，店主看全部。身份只能由店主在店主端改。':'Your role comes from the role field in the profiles table: customers see only their own data, teachers see the classes they teach, and the owner sees everything. Only the owner can change roles, from the owner dashboard.','身份 · ':'Role · ','我是老师 · 老师入口':'I\u2019m a teacher · Teacher entrance','退出登录':'Log out','完善资料，预约自动带入姓名手机号':'Complete your profile so bookings fill in your name & phone automatically',
+/* 预约流程 sheet */
+'选择场次':'Choose a session','选择日期与时段':'Choose date & time','整套课程安排（固定时间）':'Full package schedule (fixed times)','一次报名整套':'Enroll in the full set of ','节，时间固定、每节 focus 已排好；上完一节，上课记录里记一节。':' lessons at once — fixed times, each lesson\u2019s focus already set. Each finished lesson is added to your class history.','人数 / 数量':'People / Quantity','份数':'Sets','每份含全部':'Each set includes all ','最多':'up to ','本场最多可约':'This session allows up to ','联系人信息':'Contact info','姓名':'Name','手机号（用于接收预约通知）':'Phone (for booking notifications)','手机号（约课认人用，第一次填一次）':'Phone (identifies you for bookings — enter once)','手机号还是约课的身份 key：填了它，登录账号就会和按这个手机号下的预约、钱包关联起来。':'Your phone number is still the identity key for bookings: once entered, your login account is linked to the bookings and wallet under that number.','例如：Ada':'e.g. Ada','例如：(206) 555-0100':'e.g. (206) 555-0100','例如：':'e.g. ','付款方式（网页版）':'Payment method (web)','付款方式':'Payment method','信用卡 / 借记卡':'Credit / debit card','经 Stripe 安全支付':'Secure payment via Stripe','Safari 与 iPhone 上一键付':'One-tap pay on Safari & iPhone','Chrome 与 Android 上一键付':'One-tap pay on Chrome & Android','当前余额':'Current balance','付款后实时从余额扣减':'Deducted from your balance in real time once you pay','还差':'You still need ','请先去「我的预约」里充值':' — please top up in My Bookings first','提交后先为你占位 15 分钟，付款成功才算约成功；15 分钟内没付完，名额自动释放。同一场次的名额只会被成功扣减一次，不会超卖。':'Submitting holds your spot for 15 minutes; the booking counts only once payment succeeds. If you don\u2019t pay within 15 minutes, the spot is released automatically. A session\u2019s spots are only ever deducted once per booking — never oversold.','合计（USD）':'Total (USD)','合计':'Total','确认预约':'Confirm booking','提交中…':'Submitting…','容量':'Capacity','已满位':'Full','剩':'','位':' left','租用时长':'Rental duration','/ 小时，按时长算总价':'/ hour, priced by duration','日期':'Date','开始时间':'Start time','（已占用）':'(Taken)','这天已被占用的时段（不能选）：':'Times already taken this day (not selectable):','这天还没有课程 / 活动占用，':'No classes / events have taken this day yet — ','内任意整点开始都可以选。':'any on-the-hour start can be selected.','你选的时段：':'Your selected time: ','价格：':'Price: ','这一天按所选时长已没有空档，请换一天或缩短时长':'No slot of that length is left this day — try another day or a shorter duration','减少时长':'Shorter','增加时长':'Longer','减少':'Decrease','增加':'Increase','返回':'Back',
+/* 预约成功 / 取消 */
+'预约成功':'Booking Confirmed','已用钱包余额付款，余额剩':'Paid from your wallet balance. Balance left: ','。':'','付款已确认，确认信息会发到你的手机。':'Payment confirmed — a confirmation will be sent to your phone.','到店出示预约号即可。':'Just show your booking code at the studio.','项目':'Item','时间':'Time','节数':'Lessons','全部安排见「我的预约」':'See “My Bookings” for the full schedule','时长':'Duration','人数':'People','租用':'Rental ','预约号':'Booking code ','查看我的预约':'View my bookings','回到目录':'Back to catalog','取消预约':'Cancel booking','整套取消':'Cancel full package','团课号':'Package code ','团课 · 已报名':'Package · Enrolled',
+/* 登录 / 注册 */
+'登录':'Log in','注册':'Sign up','注册新账号':'Create an account','注册并登录':'Sign up & log in','登录中…':'Logging in…','注册中…':'Signing up…','用邮箱 + 密码登录。预约目录不用登录就能看；「我的」、店主端和老师工作台要登录后按身份才能进。注册后默认是顾客，老师 / 店主身份由店主在店主端改。':'Log in with email + password. The catalog is open to everyone; “My Page”, the owner dashboard and the teacher studio require login and depend on your role. New accounts start as customers — teacher / owner roles are assigned by the owner.','登录或注册':'Log in or sign up','邮箱':'Email','密码':'Password','至少 6 位':'At least 6 characters','先逛逛目录':'Browse the catalog first','手机号短信验证码登录以后再加（需要接短信服务商）；现在网页版先用邮箱 + 密码。':'SMS code login will come later (it needs an SMS provider); for now the web version uses email + password.','请填正确的邮箱。':'Please enter a valid email address.','密码至少 6 位。':'Password must be at least 6 characters.','邮箱或密码不对。如果还没注册，先点上面的「注册」。':'Wrong email or password. If you haven\u2019t signed up yet, tap “Sign up” above first.','这个邮箱已经注册过了，直接登录就行。':'This email is already registered — just log in.','注册成功。如果暂时登不进去，是邮箱确认还没完成——查一下邮箱点确认链接，再回来登录。':'Signed up. If you can\u2019t log in yet, your email confirmation is pending — check your inbox, tap the confirmation link, then come back and log in.','登录没返回会话，请稍后再试':'Login didn\u2019t return a session — please try again later','登录失败':'Login failed','登录成功，你的身份是':'Logged in — your role is ','登录成功（店主）。底部已出现「管理」tab，点它进店主端':'Logged in as owner. The “Admin” tab is now at the bottom — tap it to open the owner dashboard','登录成功（老师）。底部已出现「工作台」tab，点它进老师工作台':'Logged in as teacher. The “Studio” tab is now at the bottom — tap it to open the teacher studio','已退出登录。目录还能继续看，「我的」需要重新登录。':'Logged out. You can keep browsing the catalog; “My Page” needs a fresh login.','先登录才能看这一页，目录不用登录':'Please log in to view this page — the catalog needs no login','约课前先登录一下，登录完留在目录，重新点「预约」就行':'Please log in before booking. After logging in you\u2019ll stay on the catalog — just tap “Book” again',
+/* 身份 / 角色 */
+'店主':'Owner','老师':'Teacher','顾客':'Customer','身份':'Role','店主 admin':'Owner (admin)','老师 teacher':'Teacher (teacher)','顾客 customer':'Customer (customer)',
+/* 店主入口 / 老师入口 gates */
+'店主入口':'Owner Entrance','店主端只对店主账号开放。请先用店主邮箱登录，登录后系统按你的身份（profiles 里的 role）判断能不能进，不是输口令。':'The owner dashboard is only open to owner accounts. Please log in with the owner email first — access is decided by your role in profiles, not by a passcode.','去登录':'Go to log in','取消':'Cancel','老师入口':'Teacher Entrance','老师工作台只对老师账号开放。请先用你的老师邮箱登录，登录后只会看到你自己教的课（按 profiles 里的老师名字认课）。':'The teacher studio is only open to teacher accounts. Please log in with your teacher email — you will only see the classes you teach (matched by the teacher name in profiles).',
+/* 店主端锁定 / 重验 */
+'店主端已锁定':'Owner Dashboard Locked','你刚才已退出店主端并锁定。当前登录账号是':'You just exited and locked the owner dashboard. The current account is ','（店主），重新进入店主端前，要再输一次这个账号的密码验证身份——锁定后点「管理」tab 不会直接放行。':' (owner). Before re-entering, enter this account\u2019s password once more to verify it\u2019s you — after locking, tapping the “Admin” tab will not let you straight in.','店主账号密码':'Owner account password','输入当前账号的密码':'Enter the current account\u2019s password','请输入密码。':'Please enter your password.','验证并进入店主端':'Verify & enter owner dashboard','验证中…':'Verifying…','取消（保持锁定）':'Cancel (stay locked)','密码不对，店主端保持锁定。':'Wrong password — the owner dashboard stays locked.','验证没通过，请重新输入密码':'Verification failed — please re-enter your password','验证失败':'Verification failed','这个账号现在的身份不是店主，进不了店主端。':'This account\u2019s role is no longer owner, so it can\u2019t enter the owner dashboard.','现在没连上数据库，没法验证密码，店主端保持锁定。连上后再试。':'The database isn\u2019t connected right now, so the password can\u2019t be verified and the owner dashboard stays locked. Try again once connected.','验证通过，已重新进入店主端':'Verified — welcome back to the owner dashboard','已退出店主端并锁定。再进店主端要点「管理」tab 并重新输密码验证。':'Exited and locked the owner dashboard. To re-enter, tap the “Admin” tab and verify with your password again.','退出店主端并锁定':'Exit & lock owner dashboard',
+/* 个人资料 sheet */
+'填一次就行：以后预约时姓名和手机号会自动带入，不用每次重填。手机号是认人的关键，你的预约、上课记录和钱包余额都会按这个手机号归到你名下。':'Fill it in once: your name and phone will be filled in automatically for future bookings. Your phone number is the identity key — your bookings, class history and wallet balance are all filed under it.','保存资料':'Save profile','资料已保存，预约时会自动带入':'Profile saved — it will be filled in automatically when you book','请填写姓名':'Please enter your name','请填写手机号，这是认人的关键':'Please enter your phone number — it\u2019s the identity key',
+/* 场次编辑 sheet */
+'编辑这一节课':'Edit This Lesson','本节 focus（这节课的重点）':'This lesson\u2019s focus','如：双手配合与律动':'e.g. Two-hand coordination & groove','本节介绍（要讲什么）':'About this lesson (what it covers)','这节课会讲什么、练什么，报了这节课的学员会看到':'What this lesson will teach and practise — students booked into it will see this','本节课件':'This lesson\u2019s materials','＋ 上传新课件':'+ Upload new material','保存这一节':'Save this lesson','课件已挂到这一节，学员那边就能看到':'Material attached to this lesson — students can see it now','课件已替换成新文件':'Material replaced with the new file','课件已从这一节删除':'Material removed from this lesson','这一节的内容已更新，学员看到的就是新内容和新课件':'This lesson has been updated — students now see the new content and materials','这一节还没有课件。上传后，报了这节课的学员能在自己的预约和上课记录里打开。':'This lesson has no materials yet. After uploading, students booked into it can open them from their bookings and class history.','替换':'Replace','删除':'Delete',
+/* 店主端通用 */
+'店主工作台':'Owner Dashboard','先看今天，再处理名单、营收和上架。':'Start with today, then handle rosters, revenue and listings.','今天是':'Today is ','。先看今天，再处理名单、营收和上架。':'. Start with today, then handle rosters, revenue and listings.','日历':'Calendar','预约名单':'Rosters','营收':'Revenue','管理':'Admin','客户充值':'Customer Top-ups','账号权限':'Accounts & Roles','店主端功能':'Owner dashboard sections','本月营收（USD）':'Revenue this month (USD)','已付 + 待付合计':'Paid + unpaid combined','共':'','单有效预约':' active bookings','今日场次':'Today\u2019s sessions','场 · 已约':' sessions · ','人':' people','待付款（占位未付）':'Awaiting payment (held, unpaid)','单 ·':' bookings · ','无':'None','＋ 新增场次':'+ Add session','＋ 上架新项目':'+ List new item','看待付款名单':'View unpaid rosters','预约名单和营收数据暂时读不到：数据库读取 bookings / customers 时被拒绝。课程、场次、日历和改价都正常；名单与营收等数据库恢复读取后会重新显示，不是没有预约。':'Rosters and revenue can\u2019t be read right now: the database refused the bookings / customers read. Courses, sessions, the calendar and repricing all work; rosters and revenue will reappear once database reads recover — it does not mean there are no bookings.',
+/* 日历 */
+'本月':'This month','上月':'← Prev','下月 →':'Next →','今天':'Today','有空位':'Spots open','已满':'Full','点任意一天看当天安排':'Tap any day to see its schedule','近期场次 · 未来 7 天':'Coming up · Next 7 days','未来 7 天没有场次，去「管理」tab 新增一场吧。':'No sessions in the next 7 days — add one in the Admin tab.','这天没有安排场次，工作室空闲。':'Nothing scheduled this day — the studio is free.','给这天新增场次':'Add a session for this day','名单':'Roster','场':' sessions','已约':'Booked ','还剩':'left ','给它加场次':'Add a session',
+/* 名单 */
+'点开一场看谁约了、几个人、付没付；每场和全部名单都能一键导出 CSV。待付款的会标出来，方便跟进。':'Open a session to see who booked, how many people, and whether they paid. Each roster — or all of them — exports to CSV in one tap. Unpaid bookings are flagged for follow-up.','全部场次':'All sessions','只看有预约的':'Only sessions with bookings','导出全部名单（CSV）':'Export all rosters (CSV)','全部预约记录':'All booking records','暂无有效预约。':'No active bookings.','没有符合条件的场次。':'No sessions match.','这一场还没有人预约。':'Nobody has booked this session yet.','本场小计':'Session subtotal ','单':' bookings','待付':' unpaid','导出本场名单':'Export this roster','预约号':'Booking code ','已付':'Paid','待付款':'Awaiting payment','全部学员名单.csv':'All-rosters.csv','已导出全部学员名单（':'Exported all rosters (','已导出「':'Exported “','」本场学员名单（':'” roster for this session (','单）':' bookings)','这一场还没有人预约，没有可导出的名单':'Nobody has booked this session yet — nothing to export','暂无有效预约可导出':'No active bookings to export','学员名单.csv':'-roster.csv',
+/* 营收 */
+'只统计未取消的预约。已付 = 已通过 Stripe 或钱包余额收款；待付 = 已占位还没付款的单，占位 15 分钟未付会自动释放名额，不用追着收钱。':'Only non-cancelled bookings count. Paid = collected via Stripe or wallet balance; Unpaid = held but not yet paid — holds release automatically after 15 minutes unpaid, so there\u2019s no chasing payments.','按分类看营收':'Revenue by category','按项目看营收':'Revenue by item','按时间看营收':'Revenue over time','按天':'By day','按月':'By month','导出营收明细（CSV）':'Export revenue details (CSV)','总营收（USD）':'Total revenue (USD)','已付 · 已收款（Stripe / 余额）':'Paid · Collected (Stripe / balance)','待付 · 占位未付款':'Unpaid · Held, not yet paid','单预约':' bookings','暂无数据。':'No data yet.','暂无营收数据。':'No revenue data yet.','暂无营收数据可导出':'No revenue data to export','营收明细.csv':'Revenue-details.csv','已导出营收明细（':'Exported revenue details (','已付':'Paid ','待付':'Unpaid ',
+/* 管理 */
+'改价、调名额、上下架都在每个项目卡片里直接完成；改完顾客端立刻生效，已产生的预约不受影响。删除项目需要二次确认。':'Repricing, capacity changes and listing/unlisting all happen right on each item card; changes take effect for customers immediately, and existing bookings are unaffected. Deleting an item asks for confirmation.','个场次 · 累计已约':' sessions · ','人次':' total bookings','重新上架':'Re-list','下架':'Unlist','编辑内容':'Edit content','删除项目':'Delete item','课程名字':'Course name','介绍':'Description','老师 / 说明':'Teacher / Note','计价单位':'Pricing unit','如：60 分钟 / 2 小时':'e.g. 60 min / 2 hours','如：60 分钟 / 每小时':'e.g. 60 min / hour','如：人 / 节 / 套':'e.g. person / session / set','保存内容':'Save content','保存':'Save','改价':'Reprice','价格（美金）':'Price (USD)','顾客自选时段，按小时计':'Customers pick their time; billed by the hour','还没有场次。用下面的「给它加场次」排第一个时间。':'No sessions yet. Use “Add a session” below to schedule the first one.','课件':'Materials','个文件 · 报过这门课的学员能在「我的预约 / 上课记录」里打开':' files · Students who booked this course can open them in “My Bookings / Class history”','＋ 上传课件':'+ Upload material','支持 PDF / Word / PPT / Excel / 图片':'Supports PDF / Word / PPT / Excel / images','确定删除「':'Delete “','」？它的':'”? Its ','个场次会一起移除，已产生的预约记录仍保留在名单里。':' sessions will be removed with it; existing booking records stay in the rosters.','确认删除':'Confirm delete','名字不能为空':'Name can\u2019t be empty','的内容已更新，顾客端立刻能看到':'” has been updated — customers see it right away','「':'“','」':'”','名额不能小于已约的':'Capacity can\u2019t be less than the ','名额最多 200':'Capacity is capped at 200','的名额改为':'” capacity changed to ','场次已删除':'Session deleted','这一场已有预约，不能删除':'This session already has bookings and can\u2019t be deleted','已有预约的场次不能删除':'Sessions with bookings can\u2019t be deleted','课件「':'Material “','」已上传，报过这门课的学员现在能看到了':'” uploaded — students who booked this course can see it now','」已删除':'” deleted','价格要填美金数字':'Enter the price as a USD number','」价格已改为':'” price changed to ','，顾客端已生效':' — live for customers now','已重新上架，顾客端可见':'Re-listed — visible to customers','已下架，顾客端不再显示':'Unlisted — no longer shown to customers','已删除「':'Deleted “',
+/* 新增场次 / 上架 / 团课表单 */
+'新增场次':'Add a Session','选项目、日期和开始时间，时长选好自动算结束时间。保存后顾客端马上能约，这个时段也会自动挡住空间预约。':'Pick the item, date and start time; the end time is calculated from the duration. Once saved, customers can book it right away, and the time automatically blocks space rental.','项目':'Item','总名额 / 容量':'Total spots / Capacity','保存场次':'Save session','请选日期和开始时间':'Please pick a date and start time','已给「':'Added to “','」新增场次：':'” a new session: ','，顾客端可约':' — bookable by customers now','上架新项目':'List a New Item','填好保存即上架，顾客端目录里马上出现；上架后会自动带你去给它加第一个场次。':'Fill it in and save to list it — it appears in the customer catalog immediately, and you\u2019ll be taken to add its first session.','名称':'Name','价格（USD $）':'Price (USD $)','如：手碟合奏入门课':'e.g. Intro Handpan Ensemble','如：林老师 · 含乐器':'e.g. Teacher Lin · Instruments included','一句话介绍这个项目':'One-line intro to this item','一句话介绍这套团课':'One-line intro to this package','上架':'List it','请填名称':'Please enter a name','」已上架，接着给它加第一个场次就能开始预约':'” is listed — add its first session next so bookings can start','上架团课（整套 package）':'List a Package (Full Set)','上架团课':'List package','比如 10 节系统课：时间固定（每周同一天、同一时间），每节一个 focus，循序渐进。顾客一次报名整套、付整套的钱，全部场次会一次性排进 TA 的预约里；之后每一节都能在上面单独编辑内容和课件。团课按下面选的类型归类（手碟团课归手碟、瑜伽团课归瑜伽），目录里不单独成类，卡片上标「团课 · N 节」。':'For example a 10-lesson systematic course: fixed time (same weekday, same time each week), one focus per lesson, progressing step by step. Customers enroll in the whole set and pay the package price once; all sessions land in their bookings at once, and each lesson\u2019s content and materials can be edited individually afterwards. Packages are filed under the type chosen below (a handpan package under Handpan, a yoga package under Yoga) — they don\u2019t form their own catalog category; the card is labelled “Package · N lessons”.','团课名称':'Package name','如：手碟系统团课 · 10 节进阶':'e.g. Handpan System Package · 10-Lesson Advanced','所属类型（决定归到哪个分类）':'Type (decides which category it files under)','整套价格（USD $）':'Full package price (USD $)','每节时长':'Duration per lesson','每节名额':'Spots per lesson','节数':'Number of lessons','第一节日期':'First lesson date','每节开始时间（每周同一时间）':'Start time per lesson (same time weekly)','每节 focus':'Focus of each lesson','简介':'Description','请填团课名称':'Please enter the package name','团课「':'Package “','」已上架：':'” is listed: ','节已排好，顾客可一次报名整套':' lessons scheduled — customers can enroll in the full set at once','第':'Lesson ','节 focus':' focus',
+/* 客户充值（店主） */
+'客人线下把钱给你（比如现金或转账收到 $200）之后，在这里按手机号找到 TA、输金额充值，钱立刻进 TA 的钱包余额，TA 在自己那边马上能看到。每一笔代充都会写进流水：谁充的、给谁充、多少钱、什么时候、怎么收的钱。':'After a guest pays you offline (for example $200 in cash or by transfer), find them here by phone number and enter the amount — the money lands in their wallet balance instantly and they see it right away. Every owner top-up is written to the ledger: who topped up, for whom, how much, when, and how the money was received.','给客户充值':'Top Up a Customer','客户手机号':'Customer phone','输入客户手机号查找':'Enter the customer\u2019s phone to search','查找客户':'Find customer','先输入客户手机号':'Enter the customer\u2019s phone first','没找到这个手机号的客户。确认号码无误后，可以直接给 TA 建档并充值（建档只记手机号和下面这笔充值）：':'No customer found with this phone number. Once you\u2019ve confirmed the number, you can create their file and top up directly (the file records only the phone number and this top-up):','客户：':'Customer: ','当前钱包余额':'Current wallet balance ','单有效预约':' active bookings','充值金额（USD $）':'Top-up amount (USD $)','如：200':'e.g. 200','你是怎么收到这笔钱的':'How did you receive this money?','确认充值到 TA 的钱包':'Confirm top-up to their wallet','请输入充值金额':'Please enter the top-up amount','已给':'Topped up ','充值':' by ','），TA 那边立刻能看到':' — they can see it right away','充值没成功，请稍后再试':'Top-up failed — please try again later','查找没成功，请稍后再试':'Search failed — please try again later','最近店主代充记录':'Recent owner top-ups','还没有代充记录。':'No owner top-ups yet.','暂时读不到代充记录。':'Owner top-up records can\u2019t be read right now.','店主代充 · ':'Owner top-up · ','收款':' received','充后余额':'Balance after ',
+/* 账号权限 */
+'新用户注册后默认是顾客。只有店主能在这里把账号改成老师或店主：选身份、填老师对应的名字（老师登录后按这个名字只看自己教的课）、填手机号（约课按手机号认人，登录账号靠它关联自己的预约）。普通用户改不了自己的身份。':'New users start as customers. Only the owner can change an account into a teacher or owner here: pick the role, enter the teacher\u2019s matching name (teachers then see only the classes under that name), and enter the phone number (bookings identify people by phone, and the login account links to its bookings through it). Regular users can\u2019t change their own role.','全部账号 · 身份设置':'All Accounts · Role Settings','正在读取账号列表…':'Loading accounts…','暂时没连上数据库，账号列表读不到。连上后这里会列出 profiles 里的全部账号，店主在这里改身份。':'The database isn\u2019t connected, so the account list can\u2019t be read. Once connected, every account in profiles will be listed here for the owner to manage roles.','profiles 里还没有账号。新用户注册后会自动出现在这里（默认顾客）。第一个店主账号需要先注册，再由有权限的人把 role 改成 admin。':'There are no accounts in profiles yet. New sign-ups appear here automatically (as customers). The first owner account must sign up first, then someone with permission sets its role to admin.','说明：网页版用邮箱 + 密码登录（Supabase Auth）。手机号短信验证码登录以后接短信服务商再加；小程序用微信登录认 openid，身份同样在这张 profiles 表里。':'Note: the web version logs in with email + password (Supabase Auth). SMS code login will be added once an SMS provider is connected; the mini program uses WeChat login (openid), and roles live in this same profiles table.','手机号（约课认人）':'Phone (booking identity)','老师名字（身份是老师时填，要和课程上的老师名字一字不差）':'Teacher name (for teachers — must match the name on their courses exactly)','如：林老师':'e.g. Teacher Lin','保存身份':'Save role','身份是老师时，要填老师名字，TA 登录后才能认出自己教的课':'For a teacher role, enter the teacher name so they can see their own classes after logging in','身份已保存：':'Role saved: ',' 现在是':' is now ','保存没成功：数据库还没给 profiles 表开放写入权限，要先在库里给这张表补授权才能改身份。你的店主身份本身没问题。':'Save failed: the database hasn\u2019t granted write access to the profiles table yet — that grant has to be added in the database before roles can be changed. Your own owner role is fine.','全部账号列表暂时读不到：数据库还没给 profiles 表开放读取权限，登录账号直查这张表会被拒绝，所以其他账号暂时列不出来、身份也暂时改不了。需要在数据库里给 profiles 表补授权（GRANT SELECT, UPDATE ON public.profiles TO authenticated，并加一条店主可读全部账号的策略），补好后这里会自动恢复成完整列表。这不影响你已经通过 current_role() 验证的店主身份，店主端其他功能都正常。':'The full account list can\u2019t be read yet: the database hasn\u2019t granted read access to the profiles table, so direct queries from logged-in accounts are refused — other accounts can\u2019t be listed or re-roled for now. A grant needs to be added in the database (GRANT SELECT, UPDATE ON public.profiles TO authenticated, plus a policy letting the owner read all accounts); once added, this page returns to the full list automatically. This doesn\u2019t affect your owner role, which was verified via current_role() — everything else in the owner dashboard works.','身份：':'Role: ',' · 老师名字：':' · Teacher name: ',' · 手机号：':' · Phone: ',' · 手机号还没绑定':' · Phone not linked yet',
+/* 老师工作台 */
+'老师工作台':'Teacher Studio','只显示你教的课：看每节的学员名单和出勤，改每节的内容（focus、介绍）和课件。':'Shows only the classes you teach: view each lesson\u2019s roster and attendance, and edit each lesson\u2019s content (focus, intro) and materials.','退出老师端':'Exit teacher studio',' · 这里只显示你教的课：看名单、点出勤、改每节内容和课件。营收、改价、店主管理不在这里。':' · Only your classes are shown here: view rosters, mark attendance, and edit each lesson\u2019s content and materials. Revenue, pricing and owner management are not here.','暂时没有挂在你名下的课程。店主在管理页把课程的老师设为你的名字后，这里就会出现。':'No courses are under your name yet. Once the owner sets a course\u2019s teacher to your name on the Manage page, it will appear here.','个场次':' sessions','已到':'Here','未到':'Absent','这一节还没有学员预约。':'No students have booked this lesson yet.','已标记：已到':'Marked: present','已标记：未到':'Marked: absent','编辑本节':'Edit lesson','本节 focus：':'This lesson\u2019s focus: ','课程课件':'Course materials',' 个 · 整门课的课件在店主端管理页维护，本节课件在「编辑本节」里改':' · Course-wide materials are managed on the owner\u2019s Manage page; this lesson\u2019s materials are edited under “Edit lesson”','已退出老师端':'Exited the teacher studio','你现在的身份是顾客，老师工作台只有老师账号能进。':'Your role is customer — the teacher studio is only open to teacher accounts.','你的老师账号还没填对应的老师名字，请店主在店主端「账号权限」里补上。':'Your teacher account has no teacher name yet — ask the owner to add it under “Accounts & Roles” in the owner dashboard.','店主已登录：老师能做的事在店主端也能做。如需进老师工作台，请在「账号权限」里给店主账号填老师名字。':'You\u2019re logged in as owner: everything a teacher can do is also available in the owner dashboard. To enter the teacher studio, add a teacher name to the owner account under “Accounts & Roles”.','，店主端只有店主账号能进。身份由店主在店主端改。':', the owner dashboard is only open to owner accounts. Roles are changed by the owner in the dashboard.','你现在的身份是':'Your current role is ',
+/* 底部导航 / 页脚 / 横幅 */
+'底部导航':'Bottom navigation','预约':'Book','我的':'My','工作台':'Studio','ETERN.III 手碟馆 · Bellevue, WA':'ETERN.III Handpan Studio · Bellevue, WA','网页版与小程序版按同一数据库设计：课程、场次、预约、课件与钱包余额同步，预约时名额以一次原子操作扣减。暂时没连上数据库时显示本机演示数据；连上后刷新即自动切换为真实数据。':'The web and mini-program versions share one database design: courses, sessions, bookings, materials and wallet balances stay in sync, and booking deducts spots in a single atomic operation. When the database isn\u2019t connected, local demo data is shown; refresh after connecting to switch to live data automatically.','网页版与小程序版共用同一个数据库：课程、场次、预约、课件与钱包余额都实时同步；预约时名额在数据库里以一次原子操作扣减，防止重复预约。':'The web and mini-program versions share one database: courses, sessions, bookings, materials and wallet balances sync in real time, and booking deducts spots in a single atomic operation in the database to prevent double-booking.','暂时没连上数据库：现在显示的是本机演示数据，预约和充值只在本页里有效、不会写进数据库。刷新页面会重新尝试连接真实数据库。':'The database isn\u2019t connected right now: you\u2019re seeing local demo data, and bookings and top-ups only take effect on this page — nothing is written to the database. Refreshing the page will try to reconnect.','正在从数据库加载课程与场次…':'Loading courses and sessions from the database…',
+/* 预约 / 钱包动作提示 */
+'请先选择一个场次':'Please choose a session first','请填写手机号，店主靠它认人':'Please enter your phone number — the owner identifies you by it','其中有一节名额不够了，整套暂时报不了':'One lesson in the set doesn\u2019t have enough spots left — the package can\u2019t be booked right now','这个时段刚刚被占用了，请换一个时间':'That time was just taken — please pick another','刚刚被约走了，名额不足，请换一场':'Those spots were just booked — not enough left, please pick another session','刚刚被约满了，请换一场':'That session just filled up — please pick another','预约没成功，请稍后再试':'Booking failed — please try again later','余额不足，还差':'Insufficient balance — you still need ','，请先充值再约':' — please top up first, then book','先填姓名和手机号，钱包按手机号认人':'Enter your name and phone first — the wallet is tied to your phone number','已充值':'Topped up ','，当前余额':' — current balance ','取消没成功，请稍后再试':'Cancellation failed — please try again later','正在取消…':'Cancelling…','已取消，':'Cancelled — ',' 已退回钱包余额，名额已释放':' refunded to your wallet balance, and the spot has been released','已取消，名额已释放回该场次':'Cancelled — the spot has been released back to that session','团课已整套取消，':'Package cancelled in full — ',' 节名额全部释放':' lessons\u2019 spots all released','，费用已退回钱包余额':', and the fee has been refunded to your wallet balance','余额支付 · ':'Balance payment · ','取消退款 · ':'Cancellation refund · ','网页版 Stripe 充值':'Web Stripe top-up','店主代充 · ':'Owner top-up · ','收款':' received',
+/* 场次 / 名额提示 */
+'已约':'Booked','还剩':'Only ','个名额':' spots left','整套还剩':'Only ','本场最多可约':'Up to ','个':'',
+/* 日期 / 时间碎片 */
+'分钟':' min','小时':' hr','上午':'AM','下午':'PM','周一':'Mon','周二':'Tue','周三':'Wed','周四':'Thu','周五':'Fri','周六':'Sat','周日':'Sun','每周':'Weekly · ','每天':'Daily ','今日':'Today','近期':'Coming up',
+/* 杂项碎片（兜底，保证不残留中文） */
+'手碟馆标志':'ETERN.III Handpan Studio logo','双手轻触手碟的特写，铜色碟面泛着暖光':'Close-up of hands touching a handpan, warm light on the copper surface','声音疗愈师':'Sound healer','组家庭':'family','节':' lessons','场':' sessions','单':' bookings','位':'','套':' set','份':' sets','次':' times','人次':' bookings','名额':'spots','容量':'capacity','学员':'Student','客':'Guest','客户':'Customer','文件':'files','打开':'Open','状态':'Status','金额(USD)':'Amount (USD)','场次日期':'Session date','场次时间':'Session time','场次':'Session','上课':'Class','记录':'History','入口':'Entrance','工作台':'Studio','视图':'View','目录':'Catalog','页面':'Page','内容':'Content','设置':'Settings','搜索':'Search','查找':'Search','确认':'Confirm','成功':'Success','失败':'Failed','错误':'Error','加载':'Loading','读取':'Loading','保存':'Save','编辑':'Edit','新增':'Add','增加':'Add','减少':'Less','退出':'Exit','返回':'Back','关闭':'Close','完成':'Done','开始':'Start','结束':'End','全部':'All','其他':'Other','方式':'Method','金额':'Amount','价格':'Price','总计':'Total','小计':'Subtotal','余额':'Balance','付款':'Payment','支付':'Pay','退款':'Refund','取消':'Cancel','删除':'Delete','上传':'Upload','下载':'Download','导出':'Export','导入':'Import','管理':'Manage','名单':'Roster','营收':'Revenue','日历':'Calendar','统计':'Stats','数据':'Data','数据库':'Database','账号':'Account','权限':'Roles','身份':'Role','资料':'Profile','信息':'Info','钱包':'Wallet','课件':'Materials','课程':'Course','活动':'Event','空间':'Space','时段':'Time slot','日期':'Date','时间':'Time','时长':'Duration','老师':'Teacher','店主':'Owner','顾客':'Customer','学员们':'Students','朋友':'Friend','电话':'Phone','手机':'Phone','邮箱':'Email','地址':'Address','名字':'Name','名称':'Name','标题':'Title','说明':'Note','备注':'Note','重点':'Focus','介绍':'Intro','详情':'Details','历史':'History','未来':'Upcoming','过去':'Past','现在':'Now','今天':'Today','明天':'Tomorrow','昨天':'Yesterday','本月':'This month','上月':'Last month','下月':'Next month','本周':'This week','下周':'Next week','上周':'Last week','每天':'Daily','每周':'Weekly','每月':'Monthly','每年':'Yearly','年':' ','月':'/','日':'','周':'Week ','个':' ','位':' ','次':' ','场':' ','节':' ','单':' ','人':' people'
+};
+Object.assign(EN_MAP, {
+'有效预约':'active bookings','有效':'active','暂无':'No ','暂时':'For now ','还没有':'No ','会标出来':'will be flagged','方便跟进':'easy to follow up','付没付':'whether they paid','几个人':'how many people','谁约了':'who booked','点开一场':'Open a session','一键导出':'export in one tap','工作室空闲':'the studio is free','没有安排':'nothing scheduled','马上能约':'bookable right away','自动挡住':'automatically blocks','带你去':'take you to','加第一个场次':'add the first session','详情到店咨询':'ask in the studio for details','新上架的':'newly listed','到店':'at the studio','出示':'show','即可':'is all you need','归户':'filed under your number','归到你名下':'filed under your name','带入':'filled in','重填':'re-enter','关键':'key','认人':'identify people','认课':'match classes','认':'identify','靠它':'through it','靠':'by','关联起来':'linked','关联':'linked','默认':'default','普通用户':'Regular users','改不了':'cannot change','自己的':'their own','填了它':'once entered','没付完':'unpaid','没付':'unpaid','未付':'unpaid','占位':'hold','释放回':'released back to','释放':'released','扣完':'after deduction','扣':'deduct','退回':'returned','退款':'refund','跟进':'follow up','标出来':'flagged','会':'will','能':'can','看':'view','去':'go','点':'tap','选':'pick','填':'enter','输':'enter','找':'find','给':'for','按':'by','从':'from','到':'to','在':'in','里':'','中':'','上':'on','下':'','后':'after','前':'before','时':'when','如果':'if','或者':'or','以及':'and','还有':'also','都':'all','就':'','只':'only','不':'not','没':'no','无':'none','更':'more','最':'most','很':'very','太':'too','已':'already','正在':'','暂时没':'not ','连上':'connected','连不上':'not connected','读不到':'cannot be read','写进':'written to','写入':'write','读':'read','写':'write','同步':'in sync','实时':'real time','防止':'prevent','重复预约':'double-booking','重复':'duplicate','原子操作':'atomic operation','操作':'operation','扣减':'deducted','本机':'local','演示':'demo','本页':'this page','刷新':'refresh','重新尝试':'retry','真实':'live','切换':'switch','语言':'Language','中文':'Chinese','选择':'Select','指定':'specify','记住':'remember','保留':'keep','保持':'keep','链接':'link','复制':'copy','发给':'send to','别人':'others','对方':'they','打开':'open','直接':'directly','整个站':'the whole site','全站':'site-wide','所有页面':'all pages','所有按钮':'all buttons','所有提示':'all prompts','随时':'any time','来回':'back and forth','正常':'normally','第一次':'first time','下次':'next time','用户':'user','自己':'yourself','切到':'switch to','切回':'switch back','变':'becomes','只有':'only','才':'only then','入口':'entrance','显示':'shown','看到':'see','出现':'appear','不见':'gone','留着':'kept','删掉':'deleted','删':'delete','改完':'after editing','立刻能看到':'visible right away','生效':'in effect','不受影响':'unaffected','产生的':'existing','仍保留':'kept','一起移除':'removed together','二次确认':'confirmation','需要':'needs','必须':'must','应该':'should','可以':'can','可能':'may','建议':'recommended','适合':'suitable','适合所有水平':'suitable for all levels','所有水平':'all levels','水平':'level','循序渐进':'step by step','固定':'fixed','同一时间':'same time','同一天':'same day','每周同一天':'same weekday each week','排好':'scheduled','排进':'added to','一次性':'all at once','之后':'afterwards','上面':'above','下面':'below','单独':'separately','整门课':'the whole course','整套':'the full set','整场':'full session','整个':'whole','全部':'all','共计':'total','合计':'total','小计':'subtotal','累计':'total','人次':'bookings','名额':'spots','容量':'capacity','总名额':'total capacity','剩余':'remaining','还剩':'only left','最近':'next','未来':'upcoming','近期':'coming up','过去':'past','已上':'done','待上':'upcoming','待付':'unpaid','待确认':'pending','占位未付':'held, unpaid','未付款':'unpaid','未付完':'unpaid','收款':'payment received','收的钱':'money received','怎么收':'how it was received','什么时候':'when','多少钱':'how much','谁充的':'who topped up','给谁充':'for whom','充的':'topped up','代充':'owner top-up','流水':'ledger','记录':'records','明细':'details','汇总':'summary','分组':'grouped','板块':'section','步骤':'steps','进度':'progress','总览':'overview','常驻':'always visible','一目了然':'clear at a glance','流程':'flow','沟通':'communication','成本':'cost','减少':'reduce','绝大多数':'most','点选':'tap to choose','打字':'typing','不用':'no need to','没选完':'incomplete','明确提示':'clearly flagged','缺哪项':'what is missing','统一收进':'collected under','备注栏':'notes field','记':'note','想以后细聊的点':'points to discuss later','跳回去改':'jump back to edit','跳回':'jump back','改':'edit','一键复制':'copy in one tap','下载成文本':'download as text','邮件发出来':'send by email','发出来':'send out','顺不顺手':'how it feels','别扭':'awkward','哪里':'where','看看':'take a look','先自己':'try it yourself','填一遍':'fill it in once'
+});
+var EN_KEYS = Object.keys(EN_MAP).sort(function(a,b){ return b.length - a.length; });
+var EN_PATTERNS = [
+  [/(\d{4})\s*年\s*(\d{1,2})\s*月/g, function(m, y, mo){ return MONTHS_EN[+mo-1] + ' ' + y; }],
+  [/(\d{1,2})月(\d{1,2})日\s*周([一二三四五六日])/g, function(m, mo, d, w){ return WD_EN[w] + ', ' + MON_EN[+mo-1] + ' ' + d; }],
+  [/(\d{1,2})月(\d{1,2})日/g, function(m, mo, d){ return MON_EN[+mo-1] + ' ' + d; }],
+  [/第\s*(\d+)\s*节/g, 'Lesson $1'],
+  [/整套还剩\s*(\d+)\s*个名额/g, 'Only $1 spots left in the package'],
+  [/还剩\s*(\d+)\s*个名额/g, 'Only $1 spots left'],
+  [/剩\s*(\d+)\s*个名额/g, '$1 spots left'],
+  [/剩\s*(\d+)\s*位/g, '$1 left'],
+  [/剩\s*(\d+)/g, '$1 left'],
+  [/已约\s*(\d+)\s*\/\s*(\d+)/g, 'Booked $1/$2'],
+  [/共\s*(\d+)\s*节/g, '$1 lessons in total'],
+  [/共\s*(\d+)\s*场/g, '$1 sessions in total'],
+  [/共\s*(\d+)\s*单/g, '$1 bookings in total'],
+  [/共\s*(\d+)\s*次/g, '$1 visits in total'],
+  [/共\s*(\d+)\s*份/g, '$1 files in total'],
+  [/(\d+)\s*单有效预约/g, '$1 active bookings'],
+  [/(\d+)\s*单待上/g, '$1 upcoming'],
+  [/(\d+)\s*个场次/g, '$1 sessions'],
+  [/(\d+)\s*个文件/g, '$1 files'],
+  [/(\d+)\s*人次/g, '$1 bookings'],
+  [/租用\s*(\d+)\s*小时/g, '$1 hr rental'],
+  [/(\d+)\s*小时/g, '$1 hours'],
+  [/(\d+)\s*分钟/g, '$1 min'],
+  [/(\d+)\s*份/g, '$1 sets'],
+  [/(\d+)\s*次/g, '$1 times'],
+  [/(\d+)\s*节/g, '$1 lessons'],
+  [/(\d+)\s*场/g, '$1 sessions'],
+  [/(\d+)\s*单/g, '$1 bookings'],
+  [/(\d+)\s*人/g, '$1 people']
+];
+function hasCJK(s){ return /[\u4e00-\u9fff]/.test(s || ''); }
+function translateString(s){
+  if(!s || !hasCJK(s)) return s;
+  var trimmed = s.trim();
+  if(EN_EXACT[trimmed]) return s.replace(trimmed, EN_EXACT[trimmed]);
+  var out = s;
+  /* 先换长词组（>=4 字），避免数字规则把整句词组打断；再跑数字/日期规则；最后补短词与单字兜底 */
+  for(var a = 0; a < EN_KEYS.length; a++){
+    var ka = EN_KEYS[a];
+    if(ka.length >= 4 && out.indexOf(ka) >= 0) out = out.split(ka).join(EN_MAP[ka]);
+  }
+  for(var i = 0; i < EN_PATTERNS.length; i++) out = out.replace(EN_PATTERNS[i][0], EN_PATTERNS[i][1]);
+  for(var j = 0; j < EN_KEYS.length; j++){
+    var k = EN_KEYS[j];
+    if(out.indexOf(k) >= 0) out = out.split(k).join(EN_MAP[k]);
+  }
+  out = out.replace(/\s+·\s+·/g, ' · ').replace(/\(\s+/g, '(').replace(/\s+\)/g, ')');
+  return out;
+}
+/* 日期格式随语言走：英文用 en-US（Thu, Nov 20），中文保持原样 */
+var __origFmtDate = fmtDate;
+fmtDate = function(d){ return LANG === 'en' ? d.toLocaleDateString('en-US', { month:'short', day:'numeric', weekday:'short' }) : __origFmtDate(d); };
+var I18N_ATTRS = ['placeholder','aria-label','title','alt'];
+var i18nBusy = false;
+function translateTextNode(node){
+  var v = node.nodeValue;
+  if(!v || !hasCJK(v)) return;
+  node.__origZh = v;
+  if(LANG !== 'en') return;
+  var nv = translateString(v);
+  if(nv !== v) node.nodeValue = nv;
+}
+function translateElementAttrs(el){
+  if(!el.getAttribute) return;
+  if(!el.__origAttrs) el.__origAttrs = {};
+  I18N_ATTRS.forEach(function(a){
+    var v = el.getAttribute(a);
+    if(v && hasCJK(v)){
+      if(el.__origAttrs[a] === undefined) el.__origAttrs[a] = v;
+      if(LANG === 'en'){
+        var nv = translateString(v);
+        if(nv !== v) el.setAttribute(a, nv);
+      }
+    }
+  });
+}
+function restoreElementAttrs(el){
+  if(!el.__origAttrs || !el.getAttribute) return;
+  I18N_ATTRS.forEach(function(a){
+    if(el.__origAttrs[a] !== undefined) el.setAttribute(a, el.__origAttrs[a]);
+  });
+}
+function walkI18n(root, mode){
+  if(!root) return;
+  var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+  var nodes = [], n;
+  while((n = walker.nextNode())) nodes.push(n);
+  nodes.forEach(function(node){
+    if(mode === 'restore'){ if(node.__origZh) node.nodeValue = node.__origZh; }
+    else translateTextNode(node);
+  });
+  if(root.querySelectorAll){
+    var els = root.querySelectorAll('*');
+    for(var i = 0; i < els.length; i++){ if(mode === 'restore') restoreElementAttrs(els[i]); else translateElementAttrs(els[i]); }
+    if(root.nodeType === 1) { if(mode === 'restore') restoreElementAttrs(root); else translateElementAttrs(root); }
+  }
+}
+function applyLangToPage(){
+  var phone = document.getElementById('phone');
+  if(LANG === 'en'){ walkI18n(phone, 'translate'); walkI18n(document.querySelector('title'), 'translate'); }
+  else { walkI18n(phone, 'restore'); walkI18n(document.querySelector('title'), 'restore'); }
+  var zhB = document.getElementById('langBtnZh'), enB = document.getElementById('langBtnEn');
+  if(zhB) zhB.classList.toggle('on', LANG === 'zh');
+  if(enB) enB.classList.toggle('on', LANG === 'en');
+  document.documentElement.setAttribute('lang', LANG === 'en' ? 'en' : 'zh-CN');
+}
+function syncLangUrl(){
+  try{
+    var u = new URL(location.href);
+    u.searchParams.set('lang', LANG);
+    history.replaceState(null, '', u.pathname + u.search + u.hash);
+  }catch(e){}
+}
+function rerenderAll(){
+  try{ if(typeof updateAuthBtn === 'function') updateAuthBtn(); }catch(e){}
+  try{ if(typeof renderCards === 'function') renderCards(); }catch(e){}
+  try{ if(typeof renderMy === 'function') renderMy(); }catch(e){}
+  try{ if(typeof renderAdmin === 'function') renderAdmin(); }catch(e){}
+  try{ if(typeof renderTeacher === 'function' && typeof teacherName !== 'undefined' && teacherName) renderTeacher(); }catch(e){}
+  try{ if(typeof weekOpen !== 'undefined' && weekOpen && typeof renderWeek === 'function') renderWeek(); }catch(e){}
+  try{ if(typeof bkState !== 'undefined' && bkState && document.getElementById('sheet') && document.getElementById('sheet').classList.contains('open') && typeof drawSheet === 'function') drawSheet(); }catch(e){}
+  try{ if(typeof applyRoute === 'function') applyRoute(); }catch(e){}
+}
+function setLang(l){
+  if(l !== 'en' && l !== 'zh') return;
+  if(l === LANG){ applyLangToPage(); return; }
+  LANG = l;
+  try{ localStorage.setItem('etern-lang', l); }catch(e){}
+  syncLangUrl();
+  rerenderAll();
+  applyLangToPage();
+}
+/* 盯住动态渲染：任何新生成的中文内容（卡片、名单、营收、气泡提示、标题）在英文模式下立刻翻成英文 */
+var i18nObserver = new MutationObserver(function(muts){
+  if(LANG !== 'en' || i18nBusy) return;
+  i18nBusy = true;
+  try{
+    muts.forEach(function(m){
+      if(m.type === 'characterData') translateTextNode(m.target);
+      (m.addedNodes || []).forEach(function(node){
+        if(node.nodeType === 3) translateTextNode(node);
+        else if(node.nodeType === 1) walkI18n(node, 'translate');
+      });
+      if(m.type === 'attributes' && m.target.nodeType === 1) translateElementAttrs(m.target);
+    });
+    var t = document.querySelector('title');
+    if(t && hasCJK(t.textContent)) walkI18n(t, 'translate');
+  }catch(e){}
+  i18nBusy = false;
+});
+(function initI18n(){
+  syncLangUrl();
+  var phone = document.getElementById('phone');
+  if(phone) i18nObserver.observe(phone, { childList:true, subtree:true, characterData:true, attributes:true, attributeFilter:I18N_ATTRS });
+  var t = document.querySelector('title');
+  if(t) i18nObserver.observe(t, { childList:true, subtree:true, characterData:true });
+  applyLangToPage();
+})();
+</script>
+
 </body>
 </html>
