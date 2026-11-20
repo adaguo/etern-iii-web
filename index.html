@@ -2873,22 +2873,11 @@ function renderDash(){
       '<div class="stat"><small>今日场次</small><b>'+todays.length+' <i>场 · 已约 '+peopleToday+' 人</i></b></div>' +
       '<div class="stat"><small>待付款（占位未付）</small><b>'+(holds.length ? holds.length+' <i>单 · '+money(holdAmt)+'</i>' : '无')+'</b></div>' +
     '</div>' +
-    '<div class="qa-row">' +
-      '<button class="bookbtn brassbtn" onclick="goListNew()">＋ 上架</button>' +
-      (holds.length ? '<button class="ghostbtn" onclick="switchAdminTab(\'roster\')">看待付款名单</button>' : '') +
-    '</div>';
+    (holds.length ? '<div class="qa-row"><button class="ghostbtn" onclick="switchAdminTab(\'roster\')">看待付款名单</button></div>' : '');
 }
 /* 统一上架入口：面板默认收起，点「＋ 上架」打开；先选类型（单节课程 / 系列团课 / 活动）再填对应表单 */
 var listPanelOpen = false;
 var listType = 'course';
-function goListNew(){
-  switchAdminTab('manage');
-  if(!listPanelOpen) toggleListPanel();
-  setTimeout(function(){
-    var p = $('listPanel'); if(p) p.scrollIntoView({behavior:'smooth', block:'center'});
-    var f = $(listType === 'package' ? 'npName' : 'niName'); if(f) f.focus({preventScroll:true});
-  }, 60);
-}
 function toggleListPanel(){
   listPanelOpen = !listPanelOpen;
   var p = $('listPanel'); if(p) p.classList.toggle('hidden', !listPanelOpen);
@@ -3988,6 +3977,9 @@ function switchView(v){
     document.title = v==='admin' ? '店主工作台 · ETERN.III 手碟馆' : '老师工作台 · ETERN.III 手碟馆';
   }
   if(v==='admin'){
+    /* 每次进管理页（底部导航、隐蔽入口、重新验证后都算）都先把管理 tab 的
+       分类全部收起，不记住上次展开的是哪个；页内操作在进来之后再设置状态，不受影响 */
+    manageOpenCat = null; addSessForId = null; addSessPresetDate = null;
     renderAdmin();
     if(dbMode) loadAdminData().then(function(){ renderAdmin(); });
   }
