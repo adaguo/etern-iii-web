@@ -1542,7 +1542,7 @@ function saveRoleRow(i, pid){
     toast('身份已保存：' + (pr.display_name || pr.name || pr.teacher_name || phone || pr.phone || '未填写资料') + ' 现在是' + roleLabel(role));
     if(authUser && pid === authUser.id) fetchMyProfile().then(function(){ updateAuthBtn(); });
     renderRoles();
-  }).catch(function(){ toast('保存没成功：数据库还没给 profiles 表开放写入权限，要先在库里给这张表补授权才能改身份。你的店主身份本身没问题。'); });
+  }).catch(function(e){ var t = errText(e); toast('保存没成功：数据库还没给 profiles 表开放写入权限，要先在库里给这张表补授权才能改身份。你的店主身份本身没问题。' + (t ? '（' + t + '）' : '')); });
 }
 
 function dbFire(p){ if(dbMode && p && p.catch) p.catch(function(){}); }
@@ -1827,7 +1827,7 @@ function topupSelf(dollars){
     renderMy();
     if($('sheet').classList.contains('open')) drawSheet();
     toast('已充值 ' + money(dollars) + '，当前余额 ' + money((walletState.balanceCents || 0) / 100));
-  }).catch(function(){ toast('充值没成功，请稍后再试'); });
+  }).catch(function(e){ toastDbErr('充值没成功，请稍后再试', e); });
 }
 function initApp(){
   var grid = $('cardGrid');
@@ -1852,6 +1852,22 @@ function findSess(item, sid){ return item.sessions.find(function(s){return s.id=
 function remain(s){ return s.total - s.booked; }
 var toastTimer = null;
 function toast(msg){ var t=$('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toastTimer); toastTimer=setTimeout(function(){t.classList.remove('show');},2400); }
+/* 失败排障用：把服务器返回的真实错误原样拼出来（错误码 + 消息 + details/hint），
+   附在通用文案后面。通用文案照常走双语翻译，这段错误原文不翻译。 */
+function errText(e){
+  if(!e) return '';
+  var parts = [];
+  function push(v){ if(v){ v = String(v); if(parts.indexOf(v) < 0) parts.push(v); } }
+  var d = e.data || null;
+  if(d){ push(d.code); push(d.message || d.msg || d.error_description || d.error); push(d.details); push(d.hint); }
+  push(e.message);
+  if(!parts.length && e.status) push('HTTP ' + e.status);
+  return parts.join(' · ');
+}
+function toastDbErr(base, e){
+  var t = errText(e);
+  toast(t ? base + '（' + t + '）' : base);
+}
 function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function initial(name){ return esc(String(name||'客').slice(0,1)); }
 
@@ -2485,10 +2501,10 @@ function confirmBooking(){
   }).catch(function(err){
     doneBtn();
     if(err && err.data && err.data.message === 'no_remaining'){
-      toast('刚刚被约满了，请换一场');
+      toastDbErr('刚刚被约满了，请换一场', err);
       refreshDynamic().then(function(){ renderCards(); renderMy(); renderAdmin(); drawSheet(); });
     } else {
-      toast('预约没成功，请稍后再试');
+      toastDbErr('预约没成功，请稍后再试', err);
     }
   });
 }
@@ -2642,7 +2658,7 @@ function cancelBooking(code){
       });
     }).then(function(){ return refreshDynamic(); }).then(function(){
       renderCards(); renderMy(); renderAdmin(); doneMsg();
-    }).catch(function(){ if(!quietCancel) toast('取消没成功，请稍后再试'); });
+    }).catch(function(e){ if(!quietCancel) toastDbErr('取消没成功，请稍后再试', e); });
   }
   var s = it ? findSess(it, b.sessId) : null;
   if(s) s.booked = Math.max(0, s.booked - b.qty);
@@ -3503,7 +3519,7 @@ function ownerFindCustomer(){
     }
     var cnt = bkAll().filter(function(b){ return b.phone === c.phone && b.status !== 'cancelled'; }).length;
     box.innerHTML = '<p class="note-p" style="margin-top:12px">客户：<b style="color:var(--ink)">' + esc(c.name || '未留姓名') + '</b> · ' + esc(c.phone) + '<br />当前钱包余额 <b style="color:var(--brass);font-size:14px">' + money((c.balance_cents || 0) / 100) + '</b> · 共 ' + cnt + ' 单有效预约</p>' + owTopupFormHtml(phone);
-  }).catch(function(){ toast('查找没成功，请稍后再试'); });
+  }).catch(function(e){ toastDbErr('查找没成功，请稍后再试', e); });
 }
 function owTopupFormHtml(phone){
   return '<div class="field"><label for="owAmt">充值金额（USD $）</label><input id="owAmt" type="number" min="1" step="1" placeholder="如：200" /></div>' +
@@ -3532,7 +3548,7 @@ function ownerDoTopup(phone){
     renderOwnerTopups();
     ownerFindCustomer();
     if(myProfile.phone === phone) renderMy();
-  }).catch(function(){ toast('充值没成功，请稍后再试'); });
+  }).catch(function(e){ toastDbErr('充值没成功，请稍后再试', e); });
 }
 function ownerTopupRow(phone, t){
   var method = t.method === 'cash' ? '现金' : t.method === 'transfer' ? '线下转账' : '其他方式';
