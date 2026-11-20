@@ -364,6 +364,20 @@ img{ display:block; max-width:100%; }
 .mgmt .sessline .stepper{ margin-left:auto; }
 .mgmt .sessline .stepper b{ min-width:26px; font-size:13px; }
 .mgmt .sessline .stepper button{ width:26px; height:26px; font-size:14px; }
+/* 管理端场次紧凑行：收起时只有一行（日期+时间+已约/名额+focus 截断显示），点开才展开编辑区，一次只展开一节 */
+.mgmt .sessrow{ border-top:1px dashed var(--line); margin-top:6px; }
+.mgmt .sessrow-head{ width:100%; display:flex; align-items:center; gap:8px; background:none; border:0; padding:7px 2px; color:var(--ink); text-align:left; cursor:pointer; font:inherit; }
+.mgmt .sessrow-head .dt{ font-size:13px; font-weight:800; white-space:nowrap; }
+.mgmt .sessrow-head .cnt{ font-size:11.5px; color:var(--ink2); white-space:nowrap; }
+.mgmt .sessrow-head .fx{ flex:1; min-width:0; font-size:11.5px; color:var(--ink2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.mgmt .sessrow-head .chev{ flex:none; width:14px; height:14px; stroke:var(--brass); fill:none; stroke-width:2.2; stroke-linecap:round; stroke-linejoin:round; transform:rotate(-90deg); transition:transform .2s; }
+.mgmt .sessrow.open .sessrow-head .chev{ transform:rotate(0deg); }
+.mgmt .sessrow-panel{ padding:1px 2px 8px; }
+.mgmt .sessrow-panel .r1{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.mgmt .sessrow-panel .stepper{ margin-left:auto; }
+.mgmt .sessrow-panel .stepper b{ min-width:26px; font-size:13px; }
+.mgmt .sessrow-panel .stepper button{ width:26px; height:26px; font-size:14px; }
+.mgmt .sessrow-confirm{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; font-size:12.5px; }
 .mgmt-actions{ display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; border-top:1px solid var(--line); padding-top:12px; }
 .confirm-row{ margin-top:10px; background:#f6ddd3; border-radius:12px; padding:10px 12px; font-size:12.5px; line-height:1.6; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
 /* 管理端按分类分组：手风琴式折叠，进页全部收起，一次只展开一个分类 */
@@ -2904,6 +2918,8 @@ function setListType(t){
 var MANAGE_CATS = [ {key:'handpan', label:'手碟'}, {key:'yoga', label:'瑜伽'}, {key:'pilates', label:'普拉提'}, {key:'venue', label:'空间'}, {key:'other', label:'其他'} ];
 var manageOpenCat = null;      /* 当前展开的分类 key；null = 全部收起 */
 var addSessForId = null;       /* 哪张项目卡片正打开着卡片内的「新增场次」小表单 */
+var sessOpenId = null;         /* 场次紧凑行：当前展开编辑区的那一节场次 id；null = 全部收起，一次只展开一节 */
+var sessDelAskId = null;       /* 展开区里点了「删除」、正等二次确认的场次 id */
 var addSessPresetDate = null;  /* 日历 tab 跳过来时预选的日期（ISO） */
 function manageGroupKeyOf(it){
   var k = typeKeyOf(it);
@@ -3012,16 +3028,40 @@ function buildManageCard(it){
     card.innerHTML = head + priceHtml + editHtml + sessHtml + addSessHtml + cwHtml + actions + confirmHtml;
     return card;
 }
+/* 场次紧凑行：收起时一行显示完（日期+时间、已约/名额、focus 截断），
+   没有编辑/删除按钮和名额加减器；点这一行才展开这一节的编辑区
+   （调名额加减器、编辑本节、删除本节二次确认），一次只展开一节。 */
 function sessRowHtml(it, s){
-  return '<div class="sessline"><div class="r1"><b>'+fmtDate(s.date)+' '+esc(s.time)+'</b>' +
+  var open = sessOpenId === s.id;
+  var head = '<button type="button" class="sessrow-head" onclick="toggleSessRow(\''+s.id+'\')" aria-expanded="'+(open?'true':'false')+'">' +
+    '<span class="dt">'+fmtDate(s.date)+' '+esc(s.time)+'</span>' +
     '<span class="cnt">已约 '+s.booked+'/'+s.total+'</span>' +
-    '<span class="stepper"><button type="button" onclick="sessCap(\''+s.id+'\',-1)" '+(s.total<=s.booked?'disabled':'')+' aria-label="减少名额">−</button><b>'+s.total+'</b>' +
-    '<button type="button" onclick="sessCap(\''+s.id+'\',1)" aria-label="增加名额">＋</button></span>' +
-    '<button class="ghostbtn" style="padding:5px 11px;font-size:11.5px" onclick="openSessEdit(\''+it.id+'\',\''+s.id+'\')">编辑</button>' +
-    '<button class="ghostbtn warn" style="padding:5px 11px;font-size:11.5px" onclick="deleteSession(\''+s.id+'\')" '+(s.booked>0?'disabled title="已有预约的场次不能删除"':'')+'>删除</button></div>' +
-    (s.focus ? '<div style="font-size:12px;color:var(--ink2);margin-top:5px">本节 focus：<b style="color:var(--ink)">'+esc(s.focus)+'</b>'+(s.files && s.files.length ? ' · 本节课件 '+s.files.length+' 个' : '')+'</div>' : '') +
-    '</div>';
+    '<span class="fx">'+(s.focus ? esc(s.focus) : '')+'</span>' +
+    '<svg class="chev" viewBox="0 0 24 24"><path d="M5 9l7 7 7-7"/></svg></button>';
+  if(!open) return '<div class="sessrow">' + head + '</div>';
+  var panel;
+  if(sessDelAskId === s.id){
+    panel = '<div class="sessrow-panel"><div class="sessrow-confirm"><span>确定删除这一场？</span>' +
+      '<button class="ghostbtn warn" style="padding:5px 11px;font-size:11.5px" onclick="deleteSession(\''+s.id+'\')">确认删除</button>' +
+      '<button class="ghostbtn" style="padding:5px 11px;font-size:11.5px" onclick="cancelSessDelete()">取消</button></div></div>';
+  } else {
+    panel = '<div class="sessrow-panel"><div class="r1">' +
+      '<button class="ghostbtn" style="padding:5px 11px;font-size:11.5px" onclick="openSessEdit(\''+it.id+'\',\''+s.id+'\')">编辑</button>' +
+      '<button class="ghostbtn warn" style="padding:5px 11px;font-size:11.5px" onclick="askSessDelete(\''+s.id+'\')" '+(s.booked>0?'disabled title="已有预约的场次不能删除"':'')+'>删除</button>' +
+      '<span class="stepper"><button type="button" onclick="sessCap(\''+s.id+'\',-1)" '+(s.total<=s.booked?'disabled':'')+' aria-label="减少名额">−</button><b>'+s.total+'</b>' +
+      '<button type="button" onclick="sessCap(\''+s.id+'\',1)" aria-label="增加名额">＋</button></span></div>' +
+      (s.files && s.files.length ? '<div style="font-size:12px;color:var(--ink2);margin-top:5px">本节课件 '+s.files.length+' 个</div>' : '') +
+      '</div>';
+  }
+  return '<div class="sessrow open">' + head + panel + '</div>';
 }
+function toggleSessRow(sid){
+  sessOpenId = (sessOpenId === sid) ? null : sid;
+  sessDelAskId = null;
+  renderManage();
+}
+function askSessDelete(sid){ sessDelAskId = sid; renderManage(); }
+function cancelSessDelete(){ sessDelAskId = null; renderManage(); }
 function editItemContent(id){ itemEditId = id; renderManage(); var el = $('ei-name-' + id); if(el){ el.focus(); el.select(); } }
 function cancelItemEdit(){ itemEditId = null; renderManage(); }
 function saveItemEdit(id){
@@ -3051,6 +3091,8 @@ function sessCap(sid, d){
 function deleteSession(sid){
   var f = findSessAny(sid); if(!f) return;
   if(f.s.booked > 0){ toast('这一场已有预约，不能删除'); return; }
+  if(sessOpenId === sid) sessOpenId = null;
+  if(sessDelAskId === sid) sessDelAskId = null;
   f.it.sessions = f.it.sessions.filter(function(s){ return s.id !== sid; });
   dbFire(sbReq('sessions?id=eq.' + encodeURIComponent(sid), { method: 'DELETE' }));
   renderCards(); renderAdmin();
@@ -4156,7 +4198,7 @@ var EN_MAP = {
 /* 营收 */
 '只统计未取消的预约。已付 = 已通过 Stripe 或钱包余额收款；待付 = 已占位还没付款的单，占位 15 分钟未付会自动释放名额，不用追着收钱。':'Confirmed bookings only. Paid means card or wallet balance; unpaid holds are released after 15 minutes.','按分类看营收':'Revenue by category','按项目看营收':'Revenue by item','按时间看营收':'Revenue over time','按天':'By day','按月':'By month','导出营收明细（CSV）':'Export revenue details (CSV)','总营收（USD）':'Total revenue (USD)','已付 · 已收款（Stripe / 余额）':'Paid · Collected (Stripe / balance)','待付 · 占位未付款':'Unpaid · Held, not yet paid','单预约':' bookings','暂无数据。':'No data yet.','暂无营收数据。':'No revenue data yet.','暂无营收数据可导出':'No revenue data to export','营收明细.csv':'Revenue-details.csv','已导出营收明细（':'Exported revenue details (','已付':'Paid ','待付':'Unpaid ',
 /* 管理 */
-'改价、调名额、上下架都在每个项目卡片里直接完成；改完顾客端立刻生效，已产生的预约不受影响。删除项目需要二次确认。':'Edit prices, capacity, and visibility right on each card. Changes go live instantly; existing bookings are not affected.','点分类展开项目，改价、调名额、上下架都在卡片里完成。':'Tap a category to expand it — prices, capacity and listing status are all edited right on the item cards.','＋ 上架':'+ New listing','上架类型':'Listing type','单节课程':'Single class','系列团课':'Class series','这个分类下还没有项目，点上面的「＋ 上架」添加，选对类型就会出现在这里。':'Nothing in this category yet. Tap “+ New listing” above to add one — pick the right type and it will appear here.','先选每周上几次、在哪几天、几点开始，点「生成场次」一次排出全部场次；每一节的日期和开始 / 结束时间都能单独再改，确认后点「上架团课」发布。团课按所属类型归类，不单独成类，卡片上标「团课 · N 节」。':'Choose how many sessions a week, on which days, and at what time, then tap “Generate lessons” to lay out the whole series at once. Each lesson’s date and start / end time can still be adjusted individually before you tap “List package” to publish. Packages are filed under their type — they don’t form their own category — and the card is labelled “Package · N lessons”.','个场次 · 累计已约':' sessions · ','人次':' total bookings','重新上架':'Re-list','下架':'Unlist','编辑内容':'Edit content','删除项目':'Delete item','课程名字':'Course name','介绍':'Description','老师 / 说明':'Teacher / Note','计价单位':'Pricing unit','如：60 分钟 / 2 小时':'e.g. 60 min / 2 hours','如：60 分钟 / 每小时':'e.g. 60 min / hour','如：人 / 节 / 套':'e.g. person / session / set','保存内容':'Save content','保存':'Save','改价':'Reprice','价格（美金）':'Price (USD)','顾客自选时段，按小时计':'Customers pick their time; billed by the hour','还没有场次。用下面的「给它加场次」排第一个时间。':'No sessions yet. Use “Add a session” below to schedule the first one.','课件':'Materials','个文件 · 报过这门课的学员能在「我的预约 / 上课记录」里打开':' files · Students who booked this course can open them in “My Bookings / Class history”','＋ 上传课件':'+ Upload material','支持 PDF / Word / PPT / Excel / 图片':'Supports PDF / Word / PPT / Excel / images','确定删除「':'Delete “','」？它的':'”? Its ','个场次会一起移除，已产生的预约记录仍保留在名单里。':' sessions will be removed with it; existing booking records stay in the rosters.','确认删除':'Confirm delete','名字不能为空':'Name can\u2019t be empty','的内容已更新，顾客端立刻能看到':'” has been updated — customers see it right away','「':'“','」':'”','名额不能小于已约的':'Capacity can\u2019t be less than the ','名额最多 200':'Capacity is capped at 200','的名额改为':'” capacity changed to ','场次已删除':'Session deleted','这一场已有预约，不能删除':'This session already has bookings and can\u2019t be deleted','已有预约的场次不能删除':'Sessions with bookings can\u2019t be deleted','课件「':'Material “','」已上传，报过这门课的学员现在能看到了':'” uploaded — students who booked this course can see it now','」已删除':'” deleted','价格要填美金数字':'Enter the price as a USD number','」价格已改为':'” price changed to ','，顾客端已生效':' — live for customers now','已重新上架，顾客端可见':'Re-listed — visible to customers','已下架，顾客端不再显示':'Unlisted — no longer shown to customers','已删除「':'Deleted “',
+'改价、调名额、上下架都在每个项目卡片里直接完成；改完顾客端立刻生效，已产生的预约不受影响。删除项目需要二次确认。':'Edit prices, capacity, and visibility right on each card. Changes go live instantly; existing bookings are not affected.','点分类展开项目，改价、调名额、上下架都在卡片里完成。':'Tap a category to expand it — prices, capacity and listing status are all edited right on the item cards.','＋ 上架':'+ New listing','上架类型':'Listing type','单节课程':'Single class','系列团课':'Class series','这个分类下还没有项目，点上面的「＋ 上架」添加，选对类型就会出现在这里。':'Nothing in this category yet. Tap “+ New listing” above to add one — pick the right type and it will appear here.','先选每周上几次、在哪几天、几点开始，点「生成场次」一次排出全部场次；每一节的日期和开始 / 结束时间都能单独再改，确认后点「上架团课」发布。团课按所属类型归类，不单独成类，卡片上标「团课 · N 节」。':'Choose how many sessions a week, on which days, and at what time, then tap “Generate lessons” to lay out the whole series at once. Each lesson’s date and start / end time can still be adjusted individually before you tap “List package” to publish. Packages are filed under their type — they don’t form their own category — and the card is labelled “Package · N lessons”.','个场次 · 累计已约':' sessions · ','人次':' total bookings','重新上架':'Re-list','下架':'Unlist','编辑内容':'Edit content','删除项目':'Delete item','课程名字':'Course name','介绍':'Description','老师 / 说明':'Teacher / Note','计价单位':'Pricing unit','如：60 分钟 / 2 小时':'e.g. 60 min / 2 hours','如：60 分钟 / 每小时':'e.g. 60 min / hour','如：人 / 节 / 套':'e.g. person / session / set','保存内容':'Save content','保存':'Save','改价':'Reprice','价格（美金）':'Price (USD)','顾客自选时段，按小时计':'Customers pick their time; billed by the hour','还没有场次。用下面的「给它加场次」排第一个时间。':'No sessions yet. Use “Add a session” below to schedule the first one.','课件':'Materials','个文件 · 报过这门课的学员能在「我的预约 / 上课记录」里打开':' files · Students who booked this course can open them in “My Bookings / Class history”','＋ 上传课件':'+ Upload material','支持 PDF / Word / PPT / Excel / 图片':'Supports PDF / Word / PPT / Excel / images','确定删除「':'Delete “','」？它的':'”? Its ','个场次会一起移除，已产生的预约记录仍保留在名单里。':' sessions will be removed with it; existing booking records stay in the rosters.','确认删除':'Confirm delete','确定删除这一场？':'Delete this session?','名字不能为空':'Name can\u2019t be empty','的内容已更新，顾客端立刻能看到':'” has been updated — customers see it right away','「':'“','」':'”','名额不能小于已约的':'Capacity can\u2019t be less than the ','名额最多 200':'Capacity is capped at 200','的名额改为':'” capacity changed to ','场次已删除':'Session deleted','这一场已有预约，不能删除':'This session already has bookings and can\u2019t be deleted','已有预约的场次不能删除':'Sessions with bookings can\u2019t be deleted','课件「':'Material “','」已上传，报过这门课的学员现在能看到了':'” uploaded — students who booked this course can see it now','」已删除':'” deleted','价格要填美金数字':'Enter the price as a USD number','」价格已改为':'” price changed to ','，顾客端已生效':' — live for customers now','已重新上架，顾客端可见':'Re-listed — visible to customers','已下架，顾客端不再显示':'Unlisted — no longer shown to customers','已删除「':'Deleted “',
 /* 新增场次 / 上架 / 团课表单 */
 '新增场次':'New Session','选项目、日期和开始时间，时长选好自动算结束时间。保存后顾客端马上能约，这个时段也会自动挡住空间预约。':'Pick an item, date, and start time. Once saved, it is bookable right away and blocks studio rental for that time.','项目':'Item','总名额 / 容量':'Total spots / Capacity','保存场次':'Save session','请选日期和开始时间':'Please pick a date and start time','已给「':'Added to “','」新增场次：':'” a new session: ','，顾客端可约':' — bookable by customers now','上架新项目':'New Item','填好保存即上架，顾客端目录里马上出现；上架后会自动带你去给它加第一个场次。':'Save to list it — it appears under Booking right away. Next, add its first session.','名称':'Name','价格（USD $）':'Price (USD $)','如：手碟合奏入门课':'e.g. Intro Handpan Ensemble','如：林老师 · 含乐器':'e.g. Teacher Lin · Instruments included','一句话介绍这个项目':'One-line intro to this item','一句话介绍这套团课':'One-line intro to this package','上架':'List it','请填名称':'Please enter a name','」已上架，接着给它加第一个场次就能开始预约':'” is listed — add its first session next so bookings can start','上架团课（整套 package）':'New Package','上架团课':'List package','比如 10 节系统课：先选每周上几次、在哪几天、几点开始，点「生成场次」一次排出全部场次，每一节的日期和开始 / 结束时间都能单独再改，确认后点「上架团课」发布。每节一个 focus，循序渐进。顾客一次报名整套、付整套的钱，全部场次会一次性排进 TA 的预约里；发布之后每一节也能在上面单独改时间、内容和课件。团课按下面选的类型归类（手碟团课归手碟、瑜伽团课归瑜伽），目录里不单独成类，卡片上标「团课 · N 节」。':'For example a 10-lesson systematic course: first choose how many times a week, on which days, and at what time, then tap "Generate lessons" to lay out all sessions at once. Each lesson\u2019s date and start / end time can still be adjusted individually before you tap "List package" to publish. One focus per lesson, progressing step by step. Customers enroll in the whole set and pay the package price once; all sessions land in their bookings at once, and after publishing each lesson\u2019s time, content and materials can still be edited individually. Packages are filed under the type chosen below (a handpan package under Handpan, a yoga package under Yoga) — they don\u2019t form their own catalog category; the card is labelled "Package · N lessons".','团课名称':'Package name','如：手碟系统团课 · 10 节进阶':'e.g. Handpan System Package · 10-Lesson Advanced','所属类型（决定归到哪个分类）':'Type (decides which category it files under)','整套价格（USD $）':'Full package price (USD $)','每节时长':'Duration per lesson','每节名额':'Spots per lesson','节数':'Number of lessons','第一节日期':'First lesson date','每节开始时间（每周同一时间）':'Start time per lesson (same time weekly)','每节 focus':'Focus of each lesson','简介':'Description','请填团课名称':'Please enter the package name','团课「':'Package “','」已上架：':'” is listed: ','节已排好，顾客可一次报名整套':' lessons scheduled — customers can enroll in the full set at once','第':'Lesson ','节 focus':' focus',
 /* 管理分类分组 + 团课灵活排课 + 单节改时间 */
