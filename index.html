@@ -1275,8 +1275,8 @@ var walletState = { balanceCents: 0, txns: [] };
 var localWallet = {};
 
 /* ---------------- Supabase 数据层（anon key 只写在代码里使用，绝不渲染到页面上） ---------------- */
-var SB_URL = 'https://qiumjgsoqkgwicwfmtqr.supabase.co';
-var SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFpdW1qZ3NvcWtnd2ljd2ZtdHFyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTUwNjk3MDMsImV4cCI6MjExMDY0NTcwM30.te5m7QcIrMpkConPITx8ZGJBWXU9gOtHOzqr19TPsY4';
+var SB_URL = 'https://vavpzaiuedkotbjfwrah.supabase.co';
+var SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZhdnB6YWl1ZWRrb3RiamZ3cmFoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTUxNTQ2NzIsImV4cCI6MjExMDczMDY3Mn0.jRyCkbWfv1WgiI5jJ4qOjNpvtxIBNUW8VJMiUTTHvTo';
 function sbReq(path, opts){
   opts = opts || {};
   var tok = (typeof authToken !== 'undefined' && authToken) ? authToken : SB_KEY;
