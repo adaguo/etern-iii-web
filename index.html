@@ -366,11 +366,7 @@ img{ display:block; max-width:100%; }
 .mgmt .sessline .stepper button{ width:26px; height:26px; font-size:14px; }
 .mgmt-actions{ display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; border-top:1px solid var(--line); padding-top:12px; }
 .confirm-row{ margin-top:10px; background:#f6ddd3; border-radius:12px; padding:10px 12px; font-size:12.5px; line-height:1.6; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
-/* 管理端按分类分组：切换 chips + 每组可折叠 */
-.mgmt-cats{ display:flex; gap:8px; flex-wrap:wrap; margin:2px 18px 14px; }
-.mgmt-cats button{ border:1px solid var(--line); background:var(--card); color:var(--ink2); font-weight:800; font-size:13px; padding:8px 15px; border-radius:999px; }
-.mgmt-cats button.on{ background:var(--ink); color:#f5efe0; border-color:var(--ink); }
-.mgmt-cats button .n{ font-size:11px; opacity:.75; margin-left:3px; }
+/* 管理端按分类分组：手风琴式折叠，进页全部收起，一次只展开一个分类 */
 .mgmt-group{ margin:0 18px 16px; }
 .mgmt-group-head{ width:100%; display:flex; align-items:center; gap:9px; background:var(--paper2); border:1px solid var(--line); border-radius:14px; padding:11px 14px; color:var(--ink); text-align:left; }
 .mgmt-group-head b{ font-family:"Noto Serif SC",serif; font-size:16px; letter-spacing:.03em; }
@@ -382,6 +378,14 @@ img{ display:block; max-width:100%; }
 .mgmt-group .mgmt{ margin:0 0 12px; }
 .mgmt-group .mgmt:last-child{ margin-bottom:2px; }
 .mgmt-group-empty{ font-size:12.5px; color:var(--ink2); padding:2px 2px 4px; line-height:1.6; }
+/* 统一上架入口：一个按钮 + 先选类型（单节课程 / 系列团课 / 活动）再填表单 */
+.list-cta{ margin:0 18px 12px; }
+.list-cta button{ width:100%; background:var(--brass); color:#fff; font-weight:900; font-size:14.5px; padding:13px; border-radius:999px; letter-spacing:.05em; }
+.list-types{ display:flex; gap:8px; margin:10px 0 2px; }
+.list-types button{ flex:1; border:1.4px solid var(--line); background:var(--card); color:var(--ink2); font-weight:800; font-size:13.5px; padding:10px 4px; border-radius:12px; }
+.list-types button.on{ background:var(--ink); color:#f5efe0; border-color:var(--ink); }
+/* 项目卡片内的「新增场次」小表单 */
+.sess-add{ border-top:1px dashed var(--line); margin-top:10px; padding-top:2px; }
 /* 团课排课：每周上课日多选 + 逐节预览 */
 .pkg-days{ display:flex; gap:7px; flex-wrap:wrap; }
 .pkg-days button{ border:1.4px solid var(--line); background:var(--card); color:var(--ink2); font-weight:800; font-size:13px; padding:8px 0; border-radius:12px; flex:1 1 0; min-width:40px; }
@@ -892,63 +896,55 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
         <!-- 管理 -->
         <div id="atab-manage" class="hidden">
           <div class="pagehead" style="padding-top:14px;padding-bottom:12px">
-            <p>改价、调名额、上下架都在每个项目卡片里直接完成；改完顾客端立刻生效，已产生的预约不受影响。删除项目需要二次确认。</p>
+            <p>点分类展开项目，改价、调名额、上下架都在卡片里完成。</p>
           </div>
+          <div class="list-cta"><button type="button" id="listCtaBtn" onclick="toggleListPanel()">＋ 上架</button></div>
+
+          <div class="formbox hidden" id="listPanel" style="margin-top:2px">
+            <h4>上架</h4>
+            <div class="list-types" role="tablist" aria-label="上架类型">
+              <button type="button" class="on" data-ltype="course" onclick="setListType('course')">单节课程</button>
+              <button type="button" data-ltype="package" onclick="setListType('package')">系列团课</button>
+              <button type="button" data-ltype="activity" onclick="setListType('activity')">活动</button>
+            </div>
+            <div id="listFormSingle">
+              <form onsubmit="addItem(event)">
+                <div class="field"><label for="niName">名称</label><input id="niName" required placeholder="如：手碟合奏入门课" /></div>
+                <div class="field"><label for="niCat">分类</label>
+                  <select id="niCat"><option value="handpan">手碟课</option><option value="yoga">瑜伽课</option><option value="pilates">普拉提课</option><option value="venue">空间</option></select></div>
+                <div class="field"><label for="niPrice">价格（USD $）</label><input id="niPrice" type="number" min="0" step="0.01" required placeholder="45" /></div>
+                <div class="field"><label for="niDur">时长</label><input id="niDur" required placeholder="如：60 分钟 / 每小时" /></div>
+                <div class="field"><label for="niTeacher">老师 / 说明</label><input id="niTeacher" placeholder="如：林老师 · 含乐器" /></div>
+                <div class="field"><label for="niDesc">简介</label><textarea id="niDesc" placeholder="一句话介绍这个项目"></textarea></div>
+                <button class="submit" type="submit">上架</button>
+              </form>
+            </div>
+            <div id="listFormPkg" class="hidden">
+              <p class="fnote" style="margin-top:10px">先选每周上几次、在哪几天、几点开始，点「生成场次」一次排出全部场次；每一节的日期和开始 / 结束时间都能单独再改，确认后点「上架团课」发布。团课按所属类型归类，不单独成类，卡片上标「团课 · N 节」。</p>
+              <form onsubmit="addPackage(event)">
+                <div class="field"><label for="npName">团课名称</label><input id="npName" required placeholder="如：手碟系统团课 · 10 节进阶" /></div>
+                <div class="field"><label for="npKind">所属类型（决定归到哪个分类）</label>
+                  <select id="npKind"><option value="handpan">手碟</option><option value="yoga">瑜伽</option><option value="pilates">普拉提</option></select></div>
+                <div class="field"><label for="npPrice">整套价格（USD $）</label><input id="npPrice" type="number" min="0" step="0.01" required placeholder="380" /></div>
+                <div class="field"><label for="npTeacher">老师</label><input id="npTeacher" placeholder="如：林老师" /></div>
+                <div class="field"><label for="npDur">每节时长</label>
+                  <select id="npDur" onchange="pkgPatternChanged()"><option value="60">60 分钟</option><option value="75">75 分钟</option><option value="90">90 分钟</option><option value="120">2 小时</option></select></div>
+                <div class="field"><label for="npSeats">每节名额</label><input id="npSeats" type="number" min="1" max="200" value="12" required /></div>
+                <div class="field"><label for="npCount">节数</label><input id="npCount" type="number" min="2" max="30" value="10" required onchange="pkgPatternChanged()" /></div>
+                <div class="field"><label>每周上课日（点选，可多选）</label><div class="pkg-days" id="npDays"></div></div>
+                <div class="field"><label for="npDate">第一节日期（从这天起，顺延到选中的上课日）</label><select id="npDate" required onchange="pkgPatternChanged()"></select></div>
+                <div class="field"><label for="npStart">每节开始时间</label><input id="npStart" type="time" value="10:00" required onchange="pkgPatternChanged()" /></div>
+                <div class="field"><label>全部场次（生成后逐节调时间）</label>
+                  <button class="ghostbtn" type="button" style="margin-bottom:9px" onclick="genPkgDraft(true)">生成场次 · 逐节调时间</button>
+                  <div id="npPreview"><div class="pkg-hint">先选好每周上课日、第一节日期和开始时间，点上面的按钮生成全部场次；生成后每一节的日期、开始和结束时间、focus 都能单独改，改完再点「上架团课」发布。</div></div>
+                </div>
+                <div class="field"><label for="npDesc">简介</label><textarea id="npDesc" placeholder="一句话介绍这套团课"></textarea></div>
+                <button class="submit" type="submit">上架团课</button>
+              </form>
+            </div>
+          </div>
+
           <div id="manageList"></div>
-
-          <div class="formbox" id="addSessCard">
-            <h4>新增场次</h4>
-            <p class="fnote">选项目、日期和开始时间，时长选好自动算结束时间。保存后顾客端马上能约，这个时段也会自动挡住空间预约。</p>
-            <form onsubmit="addSession(event)">
-              <div class="field"><label for="nsItem">项目</label><select id="nsItem" required></select></div>
-              <div class="field"><label for="nsDate">日期</label><select id="nsDate" required></select></div>
-              <div class="field"><label for="nsStart">开始时间</label><input id="nsStart" type="time" required /></div>
-              <div class="field"><label for="nsDur">时长</label>
-                <select id="nsDur"><option value="60">60 分钟</option><option value="75">75 分钟</option><option value="90">90 分钟</option><option value="120">2 小时</option></select></div>
-              <div class="field"><label for="nsSeats">总名额 / 容量</label><input id="nsSeats" type="number" min="1" max="200" value="10" required /></div>
-              <button class="submit" type="submit">保存场次</button>
-            </form>
-          </div>
-
-          <div class="formbox" id="addItemCard">
-            <h4>上架新项目</h4>
-            <p class="fnote">填好保存即上架，顾客端目录里马上出现；上架后会自动带你去给它加第一个场次。</p>
-            <form onsubmit="addItem(event)">
-              <div class="field"><label for="niName">名称</label><input id="niName" required placeholder="如：手碟合奏入门课" /></div>
-              <div class="field"><label for="niCat">分类</label>
-                <select id="niCat"><option value="handpan">手碟课</option><option value="yoga">瑜伽课</option><option value="pilates">普拉提课</option><option value="venue">空间</option></select></div>
-              <div class="field"><label for="niPrice">价格（USD $）</label><input id="niPrice" type="number" min="0" step="0.01" required placeholder="45" /></div>
-              <div class="field"><label for="niDur">时长</label><input id="niDur" required placeholder="如：60 分钟 / 每小时" /></div>
-              <div class="field"><label for="niTeacher">老师 / 说明</label><input id="niTeacher" placeholder="如：林老师 · 含乐器" /></div>
-              <div class="field"><label for="niDesc">简介</label><textarea id="niDesc" placeholder="一句话介绍这个项目"></textarea></div>
-              <button class="submit" type="submit">上架</button>
-            </form>
-          </div>
-
-          <div class="formbox" id="addPkgCard">
-            <h4>上架团课（整套 package）</h4>
-            <p class="fnote">比如 10 节系统课：先选每周上几次、在哪几天、几点开始，点「生成场次」一次排出全部场次，每一节的日期和开始 / 结束时间都能单独再改，确认后点「上架团课」发布。每节一个 focus，循序渐进。顾客一次报名整套、付整套的钱，全部场次会一次性排进 TA 的预约里；发布之后每一节也能在上面单独改时间、内容和课件。团课按下面选的类型归类（手碟团课归手碟、瑜伽团课归瑜伽），目录里不单独成类，卡片上标「团课 · N 节」。</p>
-            <form onsubmit="addPackage(event)">
-              <div class="field"><label for="npName">团课名称</label><input id="npName" required placeholder="如：手碟系统团课 · 10 节进阶" /></div>
-              <div class="field"><label for="npKind">所属类型（决定归到哪个分类）</label>
-                <select id="npKind"><option value="handpan">手碟</option><option value="yoga">瑜伽</option><option value="pilates">普拉提</option></select></div>
-              <div class="field"><label for="npPrice">整套价格（USD $）</label><input id="npPrice" type="number" min="0" step="0.01" required placeholder="380" /></div>
-              <div class="field"><label for="npTeacher">老师</label><input id="npTeacher" placeholder="如：林老师" /></div>
-              <div class="field"><label for="npDur">每节时长</label>
-                <select id="npDur" onchange="pkgPatternChanged()"><option value="60">60 分钟</option><option value="75">75 分钟</option><option value="90">90 分钟</option><option value="120">2 小时</option></select></div>
-              <div class="field"><label for="npSeats">每节名额</label><input id="npSeats" type="number" min="1" max="200" value="12" required /></div>
-              <div class="field"><label for="npCount">节数</label><input id="npCount" type="number" min="2" max="30" value="10" required onchange="pkgPatternChanged()" /></div>
-              <div class="field"><label>每周上课日（点选，可多选）</label><div class="pkg-days" id="npDays"></div></div>
-              <div class="field"><label for="npDate">第一节日期（从这天起，顺延到选中的上课日）</label><select id="npDate" required onchange="pkgPatternChanged()"></select></div>
-              <div class="field"><label for="npStart">每节开始时间</label><input id="npStart" type="time" value="10:00" required onchange="pkgPatternChanged()" /></div>
-              <div class="field"><label>全部场次（生成后逐节调时间）</label>
-                <button class="ghostbtn" type="button" style="margin-bottom:9px" onclick="genPkgDraft(true)">生成场次 · 逐节调时间</button>
-                <div id="npPreview"><div class="pkg-hint">先选好每周上课日、第一节日期和开始时间，点上面的按钮生成全部场次；生成后每一节的日期、开始和结束时间、focus 都能单独改，改完再点「上架团课」发布。</div></div>
-              </div>
-              <div class="field"><label for="npDesc">简介</label><textarea id="npDesc" placeholder="一句话介绍这套团课"></textarea></div>
-              <button class="submit" type="submit">上架团课</button>
-            </form>
-          </div>
         </div>
 
         <!-- 客户充值（店主代充，入口只在店主端） -->
@@ -2839,23 +2835,6 @@ function activeBookings(){ return bkAll().filter(function(b){ return b.status!==
 function sessOf(b){ var it = findItem(b.itemId); if(!it) return null; return findSess(it, b.sessId); }
 function findSessAny(sid){ var found = null; items.forEach(function(it){ it.sessions.forEach(function(s){ if(s.id===sid) found = {it:it, s:s}; }); }); return found; }
 
-function ensureDateOptions(){
-  var sel = $('nsDate'); if(!sel) return;
-  var cur = sel.value;
-  if(!sel.options.length){
-    var html = '';
-    for(var i=0;i<60;i++){ var d = dstr(i); html += '<option value="'+isoDate(d)+'">'+fmtDate(d)+'</option>'; }
-    sel.innerHTML = html;
-  }
-  if(cur) ensureDateOption(sel, cur);
-  if(!sel.value) sel.value = isoDate(dstr(1));
-}
-function ensureDateOption(sel, iso){
-  for(var i=0;i<sel.options.length;i++){ if(sel.options[i].value===iso) return; }
-  var p = iso.split('-'); var d = new Date(+p[0], +p[1]-1, +p[2]);
-  var opt = document.createElement('option'); opt.value = iso; opt.textContent = fmtDate(d);
-  sel.appendChild(opt);
-}
 
 function renderAdmin(){
   renderDash();
@@ -2874,10 +2853,6 @@ function renderAdmin(){
   var hb = $('holdBadge');
   if(hb){ hb.textContent = holds.length; hb.classList.toggle('hidden', !holds.length); }
   renderManage();
-  var sel = $('nsItem'); var cur = sel.value;
-  sel.innerHTML = items.map(function(it){ return '<option value="'+it.id+'">'+esc(it.name)+'</option>'; }).join('');
-  if(cur && findItem(cur)) sel.value = cur;
-  ensureDateOptions();
   renderCalendar(); renderRoster(); renderRevenue();
   ensurePkgForm();
 }
@@ -2899,67 +2874,89 @@ function renderDash(){
       '<div class="stat"><small>待付款（占位未付）</small><b>'+(holds.length ? holds.length+' <i>单 · '+money(holdAmt)+'</i>' : '无')+'</b></div>' +
     '</div>' +
     '<div class="qa-row">' +
-      '<button class="bookbtn brassbtn" onclick="goManageForm(\'addSessCard\',\'nsDate\')">＋ 新增场次</button>' +
-      '<button class="ghostbtn" onclick="goManageForm(\'addItemCard\',\'niName\')">＋ 上架新项目</button>' +
+      '<button class="bookbtn brassbtn" onclick="goListNew()">＋ 上架</button>' +
       (holds.length ? '<button class="ghostbtn" onclick="switchAdminTab(\'roster\')">看待付款名单</button>' : '') +
     '</div>';
 }
-function goManageForm(cardId, focusId){
+/* 统一上架入口：面板默认收起，点「＋ 上架」打开；先选类型（单节课程 / 系列团课 / 活动）再填对应表单 */
+var listPanelOpen = false;
+var listType = 'course';
+function goListNew(){
   switchAdminTab('manage');
+  if(!listPanelOpen) toggleListPanel();
   setTimeout(function(){
-    var c = $(cardId); if(c) c.scrollIntoView({behavior:'smooth', block:'center'});
-    var f = $(focusId); if(f) f.focus({preventScroll:true});
+    var p = $('listPanel'); if(p) p.scrollIntoView({behavior:'smooth', block:'center'});
+    var f = $(listType === 'package' ? 'npName' : 'niName'); if(f) f.focus({preventScroll:true});
   }, 60);
 }
-/* 管理端按分类分组展示：手碟 / 瑜伽 / 普拉提 / 空间 四个分类各自一块，
-   顶部 chips 可只看一类，每组标题可折叠；切换 / 折叠状态跨重渲染保留。 */
+function toggleListPanel(){
+  listPanelOpen = !listPanelOpen;
+  var p = $('listPanel'); if(p) p.classList.toggle('hidden', !listPanelOpen);
+}
+function setListType(t){
+  listType = t;
+  document.querySelectorAll('.list-types button').forEach(function(b){ b.classList.toggle('on', b.getAttribute('data-ltype') === t); });
+  var single = $('listFormSingle'), pkg = $('listFormPkg');
+  if(single) single.classList.toggle('hidden', t === 'package');
+  if(pkg) pkg.classList.toggle('hidden', t !== 'package');
+  if(t !== 'package'){
+    var sel = $('niCat');
+    if(sel){
+      sel.innerHTML = t === 'activity'
+        ? '<option value="handpan">手碟</option><option value="yoga">瑜伽</option><option value="pilates">普拉提</option>'
+        : '<option value="handpan">手碟课</option><option value="yoga">瑜伽课</option><option value="pilates">普拉提课</option><option value="venue">空间</option>';
+    }
+  }
+  if(t === 'package') ensurePkgForm();
+}
+/* 管理端按分类分组展示：手碟 / 瑜伽 / 普拉提 / 空间 / 其他 五个分类各占一行
+   （名字 + 项目数 + 场次数 + 箭头）。进管理页默认全部收起，项目卡片不渲染；
+   点哪一行展开哪一行，展开另一行时上一行自动收起，一次只展开一个分类。 */
 var MANAGE_CATS = [ {key:'handpan', label:'手碟'}, {key:'yoga', label:'瑜伽'}, {key:'pilates', label:'普拉提'}, {key:'venue', label:'空间'}, {key:'other', label:'其他'} ];
-var manageCat = 'all';
-var manageClosed = {};
-function setManageCat(k){ manageCat = k; renderManage(); }
-function toggleManageGroup(k){ manageClosed[k] = !manageClosed[k]; renderManage(); }
+var manageOpenCat = null;      /* 当前展开的分类 key；null = 全部收起 */
+var addSessForId = null;       /* 哪张项目卡片正打开着卡片内的「新增场次」小表单 */
+var addSessPresetDate = null;  /* 日历 tab 跳过来时预选的日期（ISO） */
+function manageGroupKeyOf(it){
+  var k = typeKeyOf(it);
+  for(var i = 0; i < MANAGE_CATS.length; i++){ if(MANAGE_CATS[i].key === k) return k; }
+  return 'other';
+}
+function toggleManageGroup(k){
+  manageOpenCat = (manageOpenCat === k) ? null : k;
+  renderManage();
+}
 function renderManage(){
   var ml = $('manageList'); if(!ml) return;
   ml.innerHTML = '';
   var groups = {};
   MANAGE_CATS.forEach(function(c){ groups[c.key] = []; });
-  items.forEach(function(it){
-    var k = typeKeyOf(it);
-    if(!groups[k]) k = 'other';
-    groups[k].push(it);
-  });
-  var chips = document.createElement('div'); chips.className = 'mgmt-cats';
-  var chipHtml = '<button type="button" class="' + (manageCat === 'all' ? 'on' : '') + '" onclick="setManageCat(\'all\')">全部<span class="n">' + items.length + '</span></button>';
+  items.forEach(function(it){ groups[manageGroupKeyOf(it)].push(it); });
   MANAGE_CATS.forEach(function(c){
-    if(c.key === 'other' && !groups.other.length) return;
-    chipHtml += '<button type="button" class="' + (manageCat === c.key ? 'on' : '') + '" onclick="setManageCat(\'' + c.key + '\')">' + c.label + '<span class="n">' + groups[c.key].length + '</span></button>';
-  });
-  chips.innerHTML = chipHtml;
-  ml.appendChild(chips);
-  MANAGE_CATS.forEach(function(c){
-    if(manageCat !== 'all' && manageCat !== c.key) return;
     if(c.key === 'other' && !groups.other.length) return;
     var list = groups[c.key];
     var sessCount = list.reduce(function(a, it){ return a + it.sessions.length; }, 0);
+    var open = manageOpenCat === c.key;
     var g = document.createElement('div');
-    g.className = 'mgmt-group' + (manageClosed[c.key] ? ' closed' : '');
+    g.className = 'mgmt-group' + (open ? '' : ' closed');
     var gh = document.createElement('button');
     gh.type = 'button'; gh.className = 'mgmt-group-head';
     gh.setAttribute('onclick', "toggleManageGroup('" + c.key + "')");
     gh.innerHTML = '<b>' + c.label + '</b><span class="cnt">' + list.length + ' 个项目 · ' + sessCount + ' 个场次</span><svg class="chev" viewBox="0 0 24 24"><path d="M5 9l7 7 7-7"/></svg>';
     g.appendChild(gh);
-    var gb = document.createElement('div'); gb.className = 'mgmt-group-body';
-    if(!list.length){
-      gb.innerHTML = '<p class="mgmt-group-empty">这个分类下还没有项目，用下面的「上架新项目」或「上架团课」表单添加，选对分类就会出现在这里。</p>';
+    if(open){
+      var gb = document.createElement('div'); gb.className = 'mgmt-group-body';
+      if(!list.length){
+        gb.innerHTML = '<p class="mgmt-group-empty">这个分类下还没有项目，点上面的「＋ 上架」添加，选对类型就会出现在这里。</p>';
+      }
+      list.forEach(function(it){ gb.appendChild(buildManageCard(it)); });
+      g.appendChild(gb);
     }
-    list.forEach(function(it){ gb.appendChild(buildManageCard(it)); });
-    g.appendChild(gb);
     ml.appendChild(g);
   });
 }
 function buildManageCard(it){
     var bookedTotal = it.sessions.reduce(function(a,s){ return a + s.booked; }, 0);
-    var card = document.createElement('div'); card.className = 'mgmt';
+    var card = document.createElement('div'); card.className = 'mgmt'; card.id = 'mgmt-card-' + it.id;
     var head = '<div class="mh"><div><h4>'+esc(it.name)+'</h4><div class="mmeta">'+typeLabel(it)+' · '+esc(it.dur)+' · '+esc(it.teacher)+' · '+it.sessions.length+' 个场次 · 累计已约 '+bookedTotal+' 人次</div></div>' +
       (it.on===false ? '<span class="tag red">已下架</span>' : '<span class="tag">上架中</span>') + '</div>';
     var priceHtml;
@@ -2989,6 +2986,20 @@ function buildManageCard(it){
     } else {
       sessHtml = '<div class="sessline"><span style="font-size:12px;color:var(--ink2)">还没有场次。用下面的「给它加场次」排第一个时间。</span></div>';
     }
+    /* 新增场次收进卡片里：点卡片上的「给它加场次」后，表单就地出现在场次列表下面 */
+    var addSessHtml = '';
+    if(addSessForId === it.id){
+      var wantDate = addSessPresetDate || isoDate(dstr(1));
+      var dateOpts = '', foundOpt = false;
+      for(var di = 0; di < 60; di++){ var dd0 = dstr(di); var iso0 = isoDate(dd0); if(iso0 === wantDate) foundOpt = true; dateOpts += '<option value="' + iso0 + '"' + (iso0 === wantDate ? ' selected' : '') + '>' + fmtDate(dd0) + '</option>'; }
+      if(!foundOpt){ var pp0 = wantDate.split('-'); var pd0 = new Date(+pp0[0], +pp0[1]-1, +pp0[2]); dateOpts += '<option value="' + wantDate + '" selected>' + fmtDate(pd0) + '</option>'; }
+      addSessHtml = '<div class="sess-add">' +
+        '<div class="field"><label>日期</label><select id="ias-date-' + it.id + '">' + dateOpts + '</select></div>' +
+        '<div class="se-timerow"><div class="field"><label>开始时间</label><input type="time" id="ias-start-' + it.id + '" value="10:00" /></div>' +
+        '<div class="field"><label>时长</label><select id="ias-dur-' + it.id + '"><option value="60">60 分钟</option><option value="75">75 分钟</option><option value="90">90 分钟</option><option value="120">2 小时</option></select></div></div>' +
+        '<div class="field"><label>总名额 / 容量</label><input type="number" id="ias-seats-' + it.id + '" min="1" max="200" value="10" /></div>' +
+        '<div style="display:flex;gap:8px;margin-top:12px"><button class="bookbtn brassbtn" onclick="addSessionInline(\'' + it.id + '\')">保存场次</button><button class="ghostbtn" onclick="cancelAddSess()">取消</button></div></div>';
+    }
     var files = it.files || [];
     var cwHtml = '<div class="sessline"><div class="r1"><b>课件</b><span class="cnt">'+files.length+' 个文件 · 报过这门课的学员能在「我的预约 / 上课记录」里打开</span></div>' +
       files.map(function(f, i){
@@ -3009,7 +3020,7 @@ function buildManageCard(it){
         '<button class="ghostbtn warn" onclick="removeItem(\''+it.id+'\')">确认删除</button>' +
         '<button class="ghostbtn" onclick="cancelRemoveItem()">取消</button></div>';
     }
-    card.innerHTML = head + priceHtml + editHtml + sessHtml + cwHtml + actions + confirmHtml;
+    card.innerHTML = head + priceHtml + editHtml + sessHtml + addSessHtml + cwHtml + actions + confirmHtml;
     return card;
 }
 function sessRowHtml(it, s){
@@ -3082,9 +3093,36 @@ function removeCourseware(itemId, idx){
   toast('课件「'+nm+'」已删除');
 }
 function presetAddSess(id){
-  var sel = $('nsItem'); if(sel) sel.value = id;
-  var c = $('addSessCard'); if(c) c.scrollIntoView({behavior:'smooth', block:'center'});
-  var d = $('nsDate'); if(d) d.focus({preventScroll:true});
+  var it = findItem(id); if(!it) return;
+  switchAdminTab('manage');
+  manageOpenCat = manageGroupKeyOf(it);
+  addSessForId = id;
+  renderManage();
+  setTimeout(function(){
+    var card = $('mgmt-card-' + id); if(card) card.scrollIntoView({behavior:'smooth', block:'center'});
+    var d = $('ias-date-' + id); if(d) d.focus({preventScroll:true});
+  }, 60);
+}
+function cancelAddSess(){ addSessForId = null; addSessPresetDate = null; renderManage(); }
+function addSessionInline(id){
+  var it = findItem(id); if(!it) return;
+  var dv = ($('ias-date-' + id) || {}).value; var tv = ($('ias-start-' + id) || {}).value;
+  var dur = parseInt(($('ias-dur-' + id) || {}).value, 10) || 60;
+  var seats = parseInt(($('ias-seats-' + id) || {}).value, 10) || 1;
+  if(!dv || !tv){ toast('请选日期和开始时间'); return; }
+  var parts = dv.split('-'); var dt = new Date(+parts[0], +parts[1]-1, +parts[2]);
+  var tp = tv.split(':'); var startMin = (+tp[0])*60 + (+tp[1]);
+  var timeStr = fmtMin(startMin)+'–'+fmtMin(startMin + dur);
+  it.sessions.push({ id:'s'+Date.now(), date:dt, time: timeStr, total: seats, booked:0 });
+  it.sessions.sort(function(a,b){return a.date-b.date;});
+  if(dbMode){
+    var isoD = new Date(dt); isoD.setHours(Math.floor(startMin/60), startMin%60, 0, 0);
+    dbFire(sbReq('sessions', { method: 'POST', body: { item_id: it.id, starts_at: isoD.toISOString(), ends_at: new Date(isoD.getTime() + dur*60000).toISOString(), capacity: seats, remaining: seats, is_active: true } })
+      .then(function(){ return refreshDynamic(); }).then(function(){ renderCards(); renderAdmin(); }));
+  }
+  addSessForId = null; addSessPresetDate = null;
+  renderCards(); renderAdmin();
+  toast('已给「'+it.name+'」新增场次：'+fmtDate(dt)+' '+timeStr+'，顾客端可约');
 }
 function editPrice(id){ priceEditId = id; renderManage(); var inp = $('price-'+id); if(inp){ inp.focus(); inp.select(); } }
 function cancelPriceEdit(){ priceEditId = null; renderManage(); }
@@ -3112,33 +3150,14 @@ function removeItem(id){
   renderCards(); renderAdmin();
   toast('已删除「'+it.name+'」');
 }
-function addSession(e){
-  e.preventDefault();
-  var it = findItem($('nsItem').value); if(!it) return;
-  var dv = $('nsDate').value; var tv = $('nsStart').value;
-  var dur = parseInt($('nsDur').value, 10) || 60;
-  if(!dv || !tv){ toast('请选日期和开始时间'); return; }
-  var parts = dv.split('-'); var dt = new Date(+parts[0], +parts[1]-1, +parts[2]);
-  var tp = tv.split(':'); var startMin = (+tp[0])*60 + (+tp[1]);
-  var timeStr = fmtMin(startMin)+'–'+fmtMin(startMin + dur);
-  it.sessions.push({ id:'s'+Date.now(), date:dt, time: timeStr, total: parseInt($('nsSeats').value,10)||1, booked:0 });
-  it.sessions.sort(function(a,b){return a.date-b.date;});
-  if(dbMode){
-    var isoD = new Date(dt); isoD.setHours(Math.floor(startMin/60), startMin%60, 0, 0);
-    var capN = parseInt($('nsSeats').value,10)||1;
-    dbFire(sbReq('sessions', { method: 'POST', body: { item_id: it.id, starts_at: isoD.toISOString(), ends_at: new Date(isoD.getTime() + dur*60000).toISOString(), capacity: capN, remaining: capN, is_active: true } })
-      .then(function(){ return refreshDynamic(); }).then(function(){ renderCards(); renderAdmin(); }));
-  }
-  renderCards(); renderAdmin();
-  toast('已给「'+it.name+'」新增场次：'+fmtDate(dt)+' '+timeStr+'，顾客端可约');
-}
 function addItem(e){
   e.preventDefault();
   var sel = $('niCat').value;
-  var isVenue = sel === 'venue';
-  var it = { id:'i'+Date.now(), cat: isVenue ? 'venue' : 'course', kind: isVenue ? null : sel, level: isVenue ? '' : '所有水平', name:$('niName').value.trim(), price: parseFloat($('niPrice').value)||0,
+  var isAct = listType === 'activity';
+  var isVenue = !isAct && sel === 'venue';
+  var it = { id:'i'+Date.now(), cat: isVenue ? 'venue' : (isAct ? 'activity' : 'course'), kind: isVenue ? null : sel, level: isVenue ? '' : '所有水平', name:$('niName').value.trim(), price: parseFloat($('niPrice').value)||0,
     unit: isVenue ? '小时' : '人', dur:$('niDur').value.trim()||'—', teacher:$('niTeacher').value.trim()||'—',
-    img: isVenue ? IMG.venue : IMG.course2,
+    img: isVenue ? IMG.venue : (isAct ? IMG.activity : IMG.course2),
     desc:$('niDesc').value.trim()||'店主新上架的项目，详情到店咨询。', sessions:[], files:[], on:true };
   if(!it.name){ toast('请填名称'); return; }
   items.push(it);
@@ -3147,10 +3166,10 @@ function addItem(e){
       .then(function(){ return refreshDynamic(); }).then(function(){ renderCards(); renderAdmin(); }));
   }
   e.target.reset();
+  if(listPanelOpen) toggleListPanel();
   renderCards(); renderAdmin();
-  var sel = $('nsItem'); if(sel) sel.value = it.id;
-  setTimeout(function(){ var c = $('addSessCard'); if(c) c.scrollIntoView({behavior:'smooth', block:'center'}); }, 60);
   toast('「'+it.name+'」已上架，接着给它加第一个场次就能开始预约');
+  presetAddSess(it.id);
 }
 
 /* ---------------- 场次内容编辑（focus / 介绍 / 本节课件，店主与老师共用） ---------------- */
@@ -3428,7 +3447,10 @@ function addPackage(e){
   var nd = $('npDate'); if(nd) nd.value = isoDate(dstr(3));
   renderPkgDays();
   renderPkgPreview();
+  if(listPanelOpen) toggleListPanel();
   renderCards(); renderAdmin();
+  manageOpenCat = manageGroupKeyOf(it);
+  renderManage();
   toast('团课「' + name + '」已上架：' + n + ' 节已排好，顾客可一次报名整套');
 }
 
@@ -3436,6 +3458,8 @@ function addPackage(e){
 var adminTab = 'cal';
 function switchAdminTab(name){
   adminTab = name;
+  /* 每次进「管理」tab 都回到全部收起的短页面；页内展开 / 加场次的操作在切进来之后再设置状态，不受影响 */
+  if(name === 'manage'){ manageOpenCat = null; addSessForId = null; addSessPresetDate = null; }
   ['cal','roster','rev','manage','wallet','roles'].forEach(function(t){
     $('atab-'+t).classList.toggle('hidden', t!==name);
   });
@@ -3443,6 +3467,7 @@ function switchAdminTab(name){
     b.classList.toggle('on', b.getAttribute('data-atab')===name);
   });
   if(name==='cal') renderCalendar();
+  if(name==='manage') renderManage();
   if(name==='roster') renderRoster();
   if(name==='rev') renderRevenue();
   if(name==='wallet') renderOwnerWallet();
@@ -3539,11 +3564,9 @@ function renderUpcoming(){
 function addSessForSelectedDay(){
   var parts = calSelKey.split('-');
   var d = new Date(+parts[0], +parts[1], +parts[2]);
-  switchAdminTab('manage');
-  setTimeout(function(){
-    var sel = $('nsDate'); ensureDateOption(sel, isoDate(d)); sel.value = isoDate(d);
-    var c = $('addSessCard'); if(c) c.scrollIntoView({behavior:'smooth', block:'center'});
-  }, 60);
+  if(!items.length){ switchAdminTab('manage'); return; }
+  addSessPresetDate = isoDate(d);
+  presetAddSess(items[0].id);
 }
 function jumpToRoster(sessId){
   rosterOpen[sessId] = true;
@@ -4141,7 +4164,7 @@ var EN_MAP = {
 /* 营收 */
 '只统计未取消的预约。已付 = 已通过 Stripe 或钱包余额收款；待付 = 已占位还没付款的单，占位 15 分钟未付会自动释放名额，不用追着收钱。':'Confirmed bookings only. Paid means card or wallet balance; unpaid holds are released after 15 minutes.','按分类看营收':'Revenue by category','按项目看营收':'Revenue by item','按时间看营收':'Revenue over time','按天':'By day','按月':'By month','导出营收明细（CSV）':'Export revenue details (CSV)','总营收（USD）':'Total revenue (USD)','已付 · 已收款（Stripe / 余额）':'Paid · Collected (Stripe / balance)','待付 · 占位未付款':'Unpaid · Held, not yet paid','单预约':' bookings','暂无数据。':'No data yet.','暂无营收数据。':'No revenue data yet.','暂无营收数据可导出':'No revenue data to export','营收明细.csv':'Revenue-details.csv','已导出营收明细（':'Exported revenue details (','已付':'Paid ','待付':'Unpaid ',
 /* 管理 */
-'改价、调名额、上下架都在每个项目卡片里直接完成；改完顾客端立刻生效，已产生的预约不受影响。删除项目需要二次确认。':'Edit prices, capacity, and visibility right on each card. Changes go live instantly; existing bookings are not affected.','个场次 · 累计已约':' sessions · ','人次':' total bookings','重新上架':'Re-list','下架':'Unlist','编辑内容':'Edit content','删除项目':'Delete item','课程名字':'Course name','介绍':'Description','老师 / 说明':'Teacher / Note','计价单位':'Pricing unit','如：60 分钟 / 2 小时':'e.g. 60 min / 2 hours','如：60 分钟 / 每小时':'e.g. 60 min / hour','如：人 / 节 / 套':'e.g. person / session / set','保存内容':'Save content','保存':'Save','改价':'Reprice','价格（美金）':'Price (USD)','顾客自选时段，按小时计':'Customers pick their time; billed by the hour','还没有场次。用下面的「给它加场次」排第一个时间。':'No sessions yet. Use “Add a session” below to schedule the first one.','课件':'Materials','个文件 · 报过这门课的学员能在「我的预约 / 上课记录」里打开':' files · Students who booked this course can open them in “My Bookings / Class history”','＋ 上传课件':'+ Upload material','支持 PDF / Word / PPT / Excel / 图片':'Supports PDF / Word / PPT / Excel / images','确定删除「':'Delete “','」？它的':'”? Its ','个场次会一起移除，已产生的预约记录仍保留在名单里。':' sessions will be removed with it; existing booking records stay in the rosters.','确认删除':'Confirm delete','名字不能为空':'Name can\u2019t be empty','的内容已更新，顾客端立刻能看到':'” has been updated — customers see it right away','「':'“','」':'”','名额不能小于已约的':'Capacity can\u2019t be less than the ','名额最多 200':'Capacity is capped at 200','的名额改为':'” capacity changed to ','场次已删除':'Session deleted','这一场已有预约，不能删除':'This session already has bookings and can\u2019t be deleted','已有预约的场次不能删除':'Sessions with bookings can\u2019t be deleted','课件「':'Material “','」已上传，报过这门课的学员现在能看到了':'” uploaded — students who booked this course can see it now','」已删除':'” deleted','价格要填美金数字':'Enter the price as a USD number','」价格已改为':'” price changed to ','，顾客端已生效':' — live for customers now','已重新上架，顾客端可见':'Re-listed — visible to customers','已下架，顾客端不再显示':'Unlisted — no longer shown to customers','已删除「':'Deleted “',
+'改价、调名额、上下架都在每个项目卡片里直接完成；改完顾客端立刻生效，已产生的预约不受影响。删除项目需要二次确认。':'Edit prices, capacity, and visibility right on each card. Changes go live instantly; existing bookings are not affected.','点分类展开项目，改价、调名额、上下架都在卡片里完成。':'Tap a category to expand it — prices, capacity and listing status are all edited right on the item cards.','＋ 上架':'+ New listing','上架类型':'Listing type','单节课程':'Single class','系列团课':'Class series','这个分类下还没有项目，点上面的「＋ 上架」添加，选对类型就会出现在这里。':'Nothing in this category yet. Tap “+ New listing” above to add one — pick the right type and it will appear here.','先选每周上几次、在哪几天、几点开始，点「生成场次」一次排出全部场次；每一节的日期和开始 / 结束时间都能单独再改，确认后点「上架团课」发布。团课按所属类型归类，不单独成类，卡片上标「团课 · N 节」。':'Choose how many sessions a week, on which days, and at what time, then tap “Generate lessons” to lay out the whole series at once. Each lesson’s date and start / end time can still be adjusted individually before you tap “List package” to publish. Packages are filed under their type — they don’t form their own category — and the card is labelled “Package · N lessons”.','个场次 · 累计已约':' sessions · ','人次':' total bookings','重新上架':'Re-list','下架':'Unlist','编辑内容':'Edit content','删除项目':'Delete item','课程名字':'Course name','介绍':'Description','老师 / 说明':'Teacher / Note','计价单位':'Pricing unit','如：60 分钟 / 2 小时':'e.g. 60 min / 2 hours','如：60 分钟 / 每小时':'e.g. 60 min / hour','如：人 / 节 / 套':'e.g. person / session / set','保存内容':'Save content','保存':'Save','改价':'Reprice','价格（美金）':'Price (USD)','顾客自选时段，按小时计':'Customers pick their time; billed by the hour','还没有场次。用下面的「给它加场次」排第一个时间。':'No sessions yet. Use “Add a session” below to schedule the first one.','课件':'Materials','个文件 · 报过这门课的学员能在「我的预约 / 上课记录」里打开':' files · Students who booked this course can open them in “My Bookings / Class history”','＋ 上传课件':'+ Upload material','支持 PDF / Word / PPT / Excel / 图片':'Supports PDF / Word / PPT / Excel / images','确定删除「':'Delete “','」？它的':'”? Its ','个场次会一起移除，已产生的预约记录仍保留在名单里。':' sessions will be removed with it; existing booking records stay in the rosters.','确认删除':'Confirm delete','名字不能为空':'Name can\u2019t be empty','的内容已更新，顾客端立刻能看到':'” has been updated — customers see it right away','「':'“','」':'”','名额不能小于已约的':'Capacity can\u2019t be less than the ','名额最多 200':'Capacity is capped at 200','的名额改为':'” capacity changed to ','场次已删除':'Session deleted','这一场已有预约，不能删除':'This session already has bookings and can\u2019t be deleted','已有预约的场次不能删除':'Sessions with bookings can\u2019t be deleted','课件「':'Material “','」已上传，报过这门课的学员现在能看到了':'” uploaded — students who booked this course can see it now','」已删除':'” deleted','价格要填美金数字':'Enter the price as a USD number','」价格已改为':'” price changed to ','，顾客端已生效':' — live for customers now','已重新上架，顾客端可见':'Re-listed — visible to customers','已下架，顾客端不再显示':'Unlisted — no longer shown to customers','已删除「':'Deleted “',
 /* 新增场次 / 上架 / 团课表单 */
 '新增场次':'New Session','选项目、日期和开始时间，时长选好自动算结束时间。保存后顾客端马上能约，这个时段也会自动挡住空间预约。':'Pick an item, date, and start time. Once saved, it is bookable right away and blocks studio rental for that time.','项目':'Item','总名额 / 容量':'Total spots / Capacity','保存场次':'Save session','请选日期和开始时间':'Please pick a date and start time','已给「':'Added to “','」新增场次：':'” a new session: ','，顾客端可约':' — bookable by customers now','上架新项目':'New Item','填好保存即上架，顾客端目录里马上出现；上架后会自动带你去给它加第一个场次。':'Save to list it — it appears under Booking right away. Next, add its first session.','名称':'Name','价格（USD $）':'Price (USD $)','如：手碟合奏入门课':'e.g. Intro Handpan Ensemble','如：林老师 · 含乐器':'e.g. Teacher Lin · Instruments included','一句话介绍这个项目':'One-line intro to this item','一句话介绍这套团课':'One-line intro to this package','上架':'List it','请填名称':'Please enter a name','」已上架，接着给它加第一个场次就能开始预约':'” is listed — add its first session next so bookings can start','上架团课（整套 package）':'New Package','上架团课':'List package','比如 10 节系统课：先选每周上几次、在哪几天、几点开始，点「生成场次」一次排出全部场次，每一节的日期和开始 / 结束时间都能单独再改，确认后点「上架团课」发布。每节一个 focus，循序渐进。顾客一次报名整套、付整套的钱，全部场次会一次性排进 TA 的预约里；发布之后每一节也能在上面单独改时间、内容和课件。团课按下面选的类型归类（手碟团课归手碟、瑜伽团课归瑜伽），目录里不单独成类，卡片上标「团课 · N 节」。':'For example a 10-lesson systematic course: first choose how many times a week, on which days, and at what time, then tap "Generate lessons" to lay out all sessions at once. Each lesson\u2019s date and start / end time can still be adjusted individually before you tap "List package" to publish. One focus per lesson, progressing step by step. Customers enroll in the whole set and pay the package price once; all sessions land in their bookings at once, and after publishing each lesson\u2019s time, content and materials can still be edited individually. Packages are filed under the type chosen below (a handpan package under Handpan, a yoga package under Yoga) — they don\u2019t form their own catalog category; the card is labelled "Package · N lessons".','团课名称':'Package name','如：手碟系统团课 · 10 节进阶':'e.g. Handpan System Package · 10-Lesson Advanced','所属类型（决定归到哪个分类）':'Type (decides which category it files under)','整套价格（USD $）':'Full package price (USD $)','每节时长':'Duration per lesson','每节名额':'Spots per lesson','节数':'Number of lessons','第一节日期':'First lesson date','每节开始时间（每周同一时间）':'Start time per lesson (same time weekly)','每节 focus':'Focus of each lesson','简介':'Description','请填团课名称':'Please enter the package name','团课「':'Package “','」已上架：':'” is listed: ','节已排好，顾客可一次报名整套':' lessons scheduled — customers can enroll in the full set at once','第':'Lesson ','节 focus':' focus',
 /* 管理分类分组 + 团课灵活排课 + 单节改时间 */
