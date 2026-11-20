@@ -1278,6 +1278,15 @@ var localWallet = {};
 var SB_URL = 'https://vavpzaiuedkotbjfwrah.supabase.co';
 var SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZhdnB6YWl1ZWRrb3RiamZ3cmFoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTUxNTQ2NzIsImV4cCI6MjExMDczMDY3Mn0.jRyCkbWfv1WgiI5jJ4qOjNpvtxIBNUW8VJMiUTTHvTo';
 function sbReq(path, opts){
+  /* 已登录且 access_token 已过期 / 即将过期：先用 refresh_token 换新令牌再发请求。
+     否则店主长时间在管理端改课程时令牌会悄悄过期，保存被数据库以 401 拒绝
+     （dbFire 还吞掉错误，页面却提示已保存），身份读取也会跟着失效。 */
+  if(typeof authToken !== 'undefined' && authToken && typeof authRefresh !== 'undefined' && authRefresh && typeof authExpiresAt !== 'undefined' && authExpiresAt && Date.now() > authExpiresAt - 30000){
+    return ensureFreshToken().then(function(){ return sbReqRaw(path, opts); }, function(){ return sbReqRaw(path, opts); });
+  }
+  return sbReqRaw(path, opts);
+}
+function sbReqRaw(path, opts){
   opts = opts || {};
   var tok = (typeof authToken !== 'undefined' && authToken) ? authToken : SB_KEY;
   var headers = { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + tok, 'Content-Type': 'application/json' };
@@ -1296,17 +1305,88 @@ function sbRpc(name, args){ return sbReq('rpc/' + name, { method: 'POST', body: 
    身份只认 profiles.role：customer / teacher / admin。注册默认 customer（库里触发器建行）。
    读法：经 SECURITY DEFINER 的 RPC current_role() / my_teacher_name() 读（绕过 RLS）；
    profiles 表还没给登录角色开放读取权限，直查 profiles 会被数据库拒绝（42501 permission denied），不能直查定身份。
-   登录态只存在本页内存里，不写 localStorage；刷新后需重新登录。
+   登录会话存本机 localStorage（etern-session：access / refresh token + 过期时间 + 账号），
+   页面刷新、手机切后台被系统重载后自动恢复，不用重新登录；access_token 过期前用
+   refresh_token 自动续期。主动点「退出登录」才清掉本机会话。
    手机号仍是约课身份 key：登录后把 profiles.phone 与 customers 按手机号关联，
    customers.auth_user_id 写上登录账号 id，「我的」只按这个手机号/账号读自己的数据。 */
 var authUser = null;      /* {id, email} */
 var authToken = null;     /* Supabase access_token */
+var authRefresh = null;   /* Supabase refresh_token：access_token 过期后靠它续期 */
+var authExpiresAt = 0;    /* access_token 过期时间（毫秒时间戳） */
 var authProfile = null;   /* profiles 行 {id, role, phone, teacher_name, display_name/name, email} */
 var authMode = 'login';   /* login | register */
 var authIntent = null;    /* mine | admin | teacher | null —— 登录成功后要去的地方 */
 var adminUnlocked = false;
 var adminLocked = false;   /* 「退出店主端并锁定」置 true：解锁状态清掉后，再进店主端必须重新输密码验证（submitReauth），点「管理」tab 不再直接放行；重新登录也会清掉 */
 function isLoggedIn(){ return !!authUser; }
+/* ---------------- 登录会话的本机保存与恢复 ----------------
+   之前会话只存在本页内存里：手机上页面一被重载（切后台被系统回收、内存压力、
+   下拉刷新等）登录就没了，店主在「管理」里改完课程就被踢回登录页，要重新登录。
+   现在把登录接口返回的 refresh_token 一并存到本机：重载后先同步恢复登录态
+   （路由和页面守卫立刻认得已登录），再异步续期并重读身份；主动退出才清掉。 */
+var SESSION_KEY = 'etern-session';
+var refreshPromise = null;   /* 续期去重：并发请求只发一次续期 */
+function persistSession(){
+  try{
+    if(authUser && authToken) localStorage.setItem(SESSION_KEY, JSON.stringify({ access_token: authToken, refresh_token: authRefresh, expires_at: authExpiresAt, user: authUser }));
+    else localStorage.removeItem(SESSION_KEY);
+  }catch(e){}
+}
+function clearPersistedSession(){ try{ localStorage.removeItem(SESSION_KEY); }catch(e){} }
+function applySessionData(data, fallbackEmail){
+  if(!data) return;
+  if(data.access_token) authToken = data.access_token;
+  if(data.refresh_token) authRefresh = data.refresh_token;
+  if(data.expires_at) authExpiresAt = data.expires_at * 1000;
+  else if(data.expires_in) authExpiresAt = Date.now() + data.expires_in * 1000;
+  if(data.user) authUser = { id: data.user.id, email: data.user.email || fallbackEmail || (authUser && authUser.email) || '' };
+  persistSession();
+}
+function refreshSession(){
+  if(!authRefresh) return Promise.reject(new Error('没有可用的 refresh_token'));
+  return sbAuthReq('token?grant_type=refresh_token', { body: { refresh_token: authRefresh } }).then(function(data){
+    if(!data || !data.access_token) throw new Error('续期没返回新令牌');
+    applySessionData(data);
+    return data;
+  }).catch(function(e){
+    if(e && e.status){ /* 服务器明确拒绝：refresh_token 已失效，清掉登录态回到未登录 */
+      authUser = null; authToken = null; authRefresh = null; authExpiresAt = 0; authProfile = null; adminUnlocked = false;
+      clearPersistedSession();
+      updateAuthBtn();
+    }
+    throw e;
+  });
+}
+function ensureFreshToken(){
+  if(!authRefresh) return Promise.resolve();
+  if(authToken && authExpiresAt && Date.now() < authExpiresAt - 30000) return Promise.resolve();
+  if(!refreshPromise){
+    refreshPromise = refreshSession().then(function(){ refreshPromise = null; }, function(e){ refreshPromise = null; throw e; });
+  }
+  return refreshPromise;
+}
+/* 页面加载时恢复登录态：先同步把账号和令牌放回内存，让路由 / 页面守卫立刻认得已登录；
+   随后再异步续期（令牌已过期时）并重读身份。续期被服务器拒绝时 refreshSession 已清掉
+   登录态；只是网络问题则保留登录态，等网络恢复后 sbReq 会再自动续期。 */
+function restoreSession(){
+  var raw = null;
+  try{ raw = localStorage.getItem(SESSION_KEY); }catch(e){}
+  if(!raw) return;
+  var s = null; try{ s = JSON.parse(raw); }catch(e){}
+  if(!s || !s.access_token || !s.user || !s.user.id){ clearPersistedSession(); return; }
+  authToken = s.access_token; authRefresh = s.refresh_token || null; authExpiresAt = s.expires_at || 0;
+  authUser = { id: s.user.id, email: s.user.email || '' };
+  var needRefresh = !!authRefresh && (!authExpiresAt || Date.now() > authExpiresAt - 30000);
+  var p = needRefresh ? refreshSession().catch(function(){}) : Promise.resolve();
+  p.then(function(){
+    if(!authUser) return;
+    return fetchMyProfile().then(function(){
+      updateAuthBtn(); applyProfileToMine();
+      if(dbMode) refreshDynamic().then(function(){ renderCards(); renderMy(); });
+    });
+  }).catch(function(){});
+}
 function currentRole(){ return authProfile && authProfile.role ? authProfile.role : (authUser ? 'customer' : null); }
 function roleLabel(r){ return r==='admin' ? '店主' : r==='teacher' ? '老师' : '顾客'; }
 function sbAuthReq(path, opts){
@@ -1443,7 +1523,7 @@ function submitAuth(){
     : sbAuthReq('token?grant_type=password', { body: { email: email, password: pw } });
   p.then(function(data){
     if(data && data.access_token && data.user){
-      authToken = data.access_token; authUser = { id: data.user.id, email: data.user.email || email };
+      applySessionData(data, email);
       return fetchMyProfile().then(function(){ return syncPhoneLink(phone); }).then(function(){
         doneBtn(); closeAuthSilent(); routeAfterLogin();
       });
@@ -1463,7 +1543,8 @@ function submitAuth(){
 function closeAuthSilent(){ $('authSheet').classList.remove('open'); }
 function doLogout(){
   var tok = authToken;
-  authUser = null; authToken = null; authProfile = null; adminUnlocked = false; adminLocked = false; teacherName = null; teacherBookings = [];
+  authUser = null; authToken = null; authRefresh = null; authExpiresAt = 0; authProfile = null; adminUnlocked = false; adminLocked = false; teacherName = null; teacherBookings = [];
+  clearPersistedSession();
   myCustomer = null; bookings = dbMode ? [] : bookings; walletState = { balanceCents: 0, txns: [] };
   var _ae = $('authEmail'); if(_ae) _ae.value = '';
   var _ap = $('authPassword'); if(_ap) _ap.value = '';
@@ -3930,9 +4011,8 @@ function submitReauth(){
   function doneBtn(){ btn.disabled = false; btn.textContent = '验证并进入店主端'; }
   sbAuthReq('token?grant_type=password', { body: { email: authUser.email, password: pw } }).then(function(data){
     if(!data || !data.access_token) throw new Error('验证没通过，请重新输入密码');
-    /* 用新会话替换旧会话，再重新读一次身份：仍是店主才解锁 */
-    authToken = data.access_token;
-    if(data.user) authUser = { id: data.user.id, email: data.user.email || authUser.email };
+    /* 用新会话替换旧会话（并存回本机），再重新读一次身份：仍是店主才解锁 */
+    applySessionData(data, authUser.email);
     return fetchMyProfile().then(function(){
       doneBtn();
       if(currentRole() !== 'admin'){ errEl.textContent = '这个账号现在的身份不是店主，进不了店主端。'; return; }
@@ -3964,6 +4044,7 @@ function lockAdmin(){
 function tick(){ var d = new Date(); var el = $('clock'); if(el) el.textContent = d.getHours() + ':' + String(d.getMinutes()).padStart(2,'0'); }
 tick(); setInterval(tick, 20000);
 
+restoreSession();
 updateAuthBtn();
 applyRoute();
 initApp();
