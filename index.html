@@ -2500,7 +2500,9 @@ function confirmBooking(){
     if(b) afterBooked(it, b);
   }).catch(function(err){
     doneBtn();
-    if(err && err.data && err.data.message === 'no_remaining'){
+    if(errText(err).indexOf('insufficient_balance') >= 0){
+      toast('余额不足，请先充值再约');
+    } else if(err && err.data && err.data.message === 'no_remaining'){
       toastDbErr('刚刚被约满了，请换一场', err);
       refreshDynamic().then(function(){ renderCards(); renderMy(); renderAdmin(); drawSheet(); });
     } else {
@@ -2539,6 +2541,24 @@ function bookViaDB(it, pay, total){
   } else {
     sessPromise = Promise.resolve({ sessId: bkState.sessId, venueSession: false });
   }
+  function findBooked(ctx){
+    return refreshDynamic().then(function(){
+      var found = null;
+      for(var i = 0; i < bookings.length; i++){ if(bookings[i].code === code) found = bookings[i]; }
+      return found || { code: code, itemId: it.id, sessId: ctx.sessId, qty: it.cat === 'venue' ? 1 : bkState.qty, hours: it.cat === 'venue' ? bkState.vDur : null, total: total, pay: pay, payMethod: isBalance ? 'balance' : 'stripe', status: 'paid' };
+    });
+  }
+  if(isBalance){
+    /* 余额支付走原子函数 book_with_balance：直接建出已确认已付的预约（扣余额 + 写流水同事务），不再分步占位再扣款 */
+    return sessPromise.then(function(ctx){
+      return sbRpc('book_with_balance', { p_session_id: ctx.sessId, p_customer_id: myCustomer.id, p_party_size: it.cat === 'venue' ? 1 : bkState.qty, p_total_cents: totalCents, p_booking_code: code, p_idempotency_key: uuidv4(), p_note: '余额支付 · ' + it.name + ' ' + code, p_source: 'web' })
+        .then(function(){ return ctx; }, function(err){
+          if(ctx.venueSession) dbFire(sbReq('sessions?id=eq.' + ctx.sessId, { method: 'DELETE' }));
+          throw err;
+        });
+    }).then(findBooked);
+  }
+  /* 卡支付路径不变：book_session 先占位（15 分钟），付款成功后把单置为已付确认 */
   return sessPromise.then(function(ctx){
     return sbRpc('book_session', { p_session_id: ctx.sessId, p_party_size: it.cat === 'venue' ? 1 : bkState.qty, p_customer_id: myCustomer.id, p_total_cents: totalCents, p_booking_code: code, p_idempotency_key: uuidv4(), p_source: 'web' })
       .then(function(){ return ctx; }, function(err){
@@ -2546,17 +2566,8 @@ function bookViaDB(it, pay, total){
         throw err;
       });
   }).then(function(ctx){
-    /* book_session 先占位（15 分钟），付款成功后把单置为已付确认；余额付先扣余额写流水 */
-    var payChain = isBalance ? walletAdjust(totalCents, 'spend', null, '余额支付 · ' + it.name + ' ' + code) : Promise.resolve();
-    return payChain.then(function(){
-      return sbReq('bookings?booking_code=eq.' + encodeURIComponent(code), { method: 'PATCH', body: isBalance ? { pay_status: 'paid', pay_method: 'balance', status: 'confirmed' } : { pay_status: 'paid', pay_method: 'stripe', status: 'confirmed' } }).catch(function(){});
-    }).then(function(){
-      return refreshDynamic().then(function(){
-        var found = null;
-        for(var i = 0; i < bookings.length; i++){ if(bookings[i].code === code) found = bookings[i]; }
-        return found || { code: code, itemId: it.id, sessId: ctx.sessId, qty: it.cat === 'venue' ? 1 : bkState.qty, hours: it.cat === 'venue' ? bkState.vDur : null, total: total, pay: pay, payMethod: isBalance ? 'balance' : 'stripe', status: 'paid' };
-      });
-    });
+    return sbReq('bookings?booking_code=eq.' + encodeURIComponent(code), { method: 'PATCH', body: { pay_status: 'paid', pay_method: 'stripe', status: 'confirmed' } }).catch(function(){})
+      .then(function(){ return findBooked(ctx); });
   });
 }
 function bookPackageLocal(it, pay, total){
@@ -2576,6 +2587,17 @@ function bookPackageDB(it, pay, total){
   var isBalance = pay === '余额支付';
   var totalCents = Math.round(total * 100);
   var code = genBookingCode();
+  if(isBalance){
+    /* 余额报名走原子函数 enroll_package_with_balance：逐节建单 + 扣余额 + 写流水 + 写报名记录一次完成，不再分步 */
+    return sbRpc('enroll_package_with_balance', { p_package_item_id: it.id, p_customer_id: myCustomer.id, p_party_size: bkState.qty, p_total_cents: totalCents, p_enrollment_code: code, p_idempotency_key: uuidv4(), p_note: '余额支付 · ' + it.name + ' ' + code, p_source: 'web' })
+      .then(function(){
+        return refreshDynamic().then(function(){
+          var found = null;
+          for(var i = 0; i < bookings.length; i++){ if(bookings[i].pkg === code && bookings[i].code === code + '-1') found = bookings[i]; }
+          return found || { code: code + '-1', pkg: code, itemId: it.id, sessId: it.sessions[0].id, qty: bkState.qty, total: total, pay: pay, payMethod: 'balance', status: 'paid' };
+        });
+      });
+  }
   var createdIds = [];
   var chain = Promise.resolve();
   it.sessions.forEach(function(s, i){
@@ -2651,11 +2673,8 @@ function cancelBooking(code){
   if(dbMode && b.dbId){
     toast('正在取消…');
     return sbRpc('cancel_booking', { p_booking_id: b.dbId }).then(function(){
+      /* cancel_booking 内部已含余额退款：取消 + 还名额 + 退款 + 写流水 + 改退款状态同事务完成，这里不再单独退款 */
       if(it && it.cat === 'venue' && b.sessId) dbFire(sbReq('sessions?id=eq.' + b.sessId, { method: 'DELETE' }));
-      var chain = wasBalancePaid ? walletAdjust(refundCents, 'refund', b.dbId, '取消退款 · ' + (it ? it.name : '') + ' ' + b.code) : Promise.resolve();
-      return chain.then(function(){
-        if(wasBalancePaid) return sbReq('bookings?id=eq.' + b.dbId, { method: 'PATCH', body: { pay_status: 'refunded', refunded_cents: refundCents } }).catch(function(){});
-      });
     }).then(function(){ return refreshDynamic(); }).then(function(){
       renderCards(); renderMy(); renderAdmin(); doneMsg();
     }).catch(function(e){ if(!quietCancel) toastDbErr('取消没成功，请稍后再试', e); });
