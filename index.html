@@ -2533,11 +2533,21 @@ function bookViaDB(it, pay, total){
   var totalCents = Math.round(total * 100);
   var code = genBookingCode();
   var sessPromise;
-  if(it.cat === 'venue'){
+  if(it.cat === 'venue' && isBalance){
+    /* 余额路径由 book_venue_with_balance 自己建场次，这里不预建，避免多出一个孤儿场次 */
+    sessPromise = Promise.resolve({ sessId: null, venueSession: true });
+  } else if(it.cat === 'venue'){
     var start = new Date(bkState.vDate);
     start.setHours(Math.floor(bkState.vStart / 60), bkState.vStart % 60, 0, 0);
-    sessPromise = sbReq('sessions', { method: 'POST', prefer: 'return=representation', body: { item_id: it.id, starts_at: start.toISOString(), ends_at: new Date(start.getTime() + (bkState.vDur || 1)*3600000).toISOString(), capacity: 1, remaining: 1, is_active: true } })
-      .then(function(rows){ return { sessId: rows[0].id, venueSession: true }; });
+    /* 顾客没有 sessions 表写权限：一次性场次改由数据库函数 create_venue_session 建（服务端校验时段占用） */
+    sessPromise = sbRpc('create_venue_session', { p_item_id: it.id, p_starts_at: start.toISOString(), p_ends_at: new Date(start.getTime() + (bkState.vDur || 1)*3600000).toISOString() })
+      .then(function(res){
+        var sid = null;
+        if(typeof res === 'string') sid = res;
+        else if(res && res[0] != null){ var r0 = res[0]; sid = typeof r0 === 'string' ? r0 : (r0.id || r0.session_id || r0.create_venue_session || null); }
+        else if(res && typeof res === 'object') sid = res.id || res.session_id || null;
+        return { sessId: sid, venueSession: true };
+      });
   } else {
     sessPromise = Promise.resolve({ sessId: bkState.sessId, venueSession: false });
   }
@@ -2549,20 +2559,33 @@ function bookViaDB(it, pay, total){
     });
   }
   if(isBalance){
-    /* 余额支付走原子函数 book_with_balance：直接建出已确认已付的预约（扣余额 + 写流水同事务），不再分步占位再扣款 */
-    return sessPromise.then(function(ctx){
-      return sbRpc('book_with_balance', { p_session_id: ctx.sessId, p_customer_id: myCustomer.id, p_party_size: it.cat === 'venue' ? 1 : bkState.qty, p_total_cents: totalCents, p_booking_code: code, p_idempotency_key: uuidv4(), p_note: '余额支付 · ' + it.name + ' ' + code, p_source: 'web' })
-        .then(function(){ return ctx; }, function(err){
-          if(ctx.venueSession) dbFire(sbReq('sessions?id=eq.' + ctx.sessId, { method: 'DELETE' }));
-          throw err;
+    if(it.cat === 'venue'){
+      /* 场馆余额支付走原子函数 book_venue_with_balance：建一次性场次 + 占位 + 扣余额 + 写流水 + 建已确认已付预约一次完成 */
+      var vStart = new Date(bkState.vDate);
+      vStart.setHours(Math.floor(bkState.vStart / 60), bkState.vStart % 60, 0, 0);
+      return sbRpc('book_venue_with_balance', { p_item_id: it.id, p_customer_id: myCustomer.id, p_starts_at: vStart.toISOString(), p_ends_at: new Date(vStart.getTime() + (bkState.vDur || 1)*3600000).toISOString(), p_total_cents: totalCents, p_booking_code: code, p_idempotency_key: uuidv4(), p_note: '余额支付 · ' + it.name + ' ' + code, p_source: 'web' })
+        .then(function(res){
+          var row = res && res[0] ? res[0] : res;
+          if(typeof res === 'string') row = null;
+          var sid = null;
+          if(row && typeof row === 'object'){
+            sid = row.session_id || null;
+            if(!sid && row.book_venue_with_balance && typeof row.book_venue_with_balance === 'object') sid = row.book_venue_with_balance.session_id || null;
+          }
+          return findBooked({ sessId: sid, venueSession: true });
         });
+    }
+    /* 单节课余额支付走原子函数 book_with_balance：直接建出已确认已付的预约（扣余额 + 写流水同事务），不再分步占位再扣款 */
+    return sessPromise.then(function(ctx){
+      return sbRpc('book_with_balance', { p_session_id: ctx.sessId, p_customer_id: myCustomer.id, p_party_size: bkState.qty, p_total_cents: totalCents, p_booking_code: code, p_idempotency_key: uuidv4(), p_note: '余额支付 · ' + it.name + ' ' + code, p_source: 'web' })
+        .then(function(){ return ctx; });
     }).then(findBooked);
   }
-  /* 卡支付路径不变：book_session 先占位（15 分钟），付款成功后把单置为已付确认 */
+  /* 卡支付路径：场馆先由 create_venue_session 建一次性场次，再走 book_session 占位（15 分钟），付款成功后把单置为已付确认；占位失败用 delete_venue_session 清掉刚建的场次 */
   return sessPromise.then(function(ctx){
     return sbRpc('book_session', { p_session_id: ctx.sessId, p_party_size: it.cat === 'venue' ? 1 : bkState.qty, p_customer_id: myCustomer.id, p_total_cents: totalCents, p_booking_code: code, p_idempotency_key: uuidv4(), p_source: 'web' })
       .then(function(){ return ctx; }, function(err){
-        if(ctx.venueSession) dbFire(sbReq('sessions?id=eq.' + ctx.sessId, { method: 'DELETE' }));
+        if(ctx.venueSession) dbFire(sbRpc('delete_venue_session', { p_session_id: ctx.sessId }));
         throw err;
       });
   }).then(function(ctx){
@@ -2673,8 +2696,8 @@ function cancelBooking(code){
   if(dbMode && b.dbId){
     toast('正在取消…');
     return sbRpc('cancel_booking', { p_booking_id: b.dbId }).then(function(){
-      /* cancel_booking 内部已含余额退款：取消 + 还名额 + 退款 + 写流水 + 改退款状态同事务完成，这里不再单独退款 */
-      if(it && it.cat === 'venue' && b.sessId) dbFire(sbReq('sessions?id=eq.' + b.sessId, { method: 'DELETE' }));
+      /* cancel_booking 内部已含余额退款：取消 + 还名额 + 退款 + 写流水 + 改退款状态同事务完成，这里不再单独退款；
+         一次性场次行也由 cancel_booking 在最后一个预约取消时内部删除，这里不再直删 sessions 表 */
     }).then(function(){ return refreshDynamic(); }).then(function(){
       renderCards(); renderMy(); renderAdmin(); doneMsg();
     }).catch(function(e){ if(!quietCancel) toastDbErr('取消没成功，请稍后再试', e); });
