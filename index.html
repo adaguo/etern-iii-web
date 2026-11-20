@@ -3177,15 +3177,24 @@ function renderPkgPreview(skipSync){
   var html = '<p class="fnote" style="margin:0 0 9px">共 ' + pkgDraft.length + ' 节 · 每周 ' + (pkgDays ? pkgDays.length : 0) + ' 次。下面每一节都能单独改：日期、开始 / 结束时间、focus 改完直接点「上架团课」发布。</p>';
   html += pkgDraft.map(function(r, i){
     var dp = r.date.split('-'); var dd = new Date(+dp[0], +dp[1] - 1, +dp[2]);
-    return '<div class="pkg-row"><div class="pr-head"><b>第 ' + (i + 1) + ' 节</b><span>' + fmtDate(dd) + '</span></div>' +
+    return '<div class="pkg-row"><div class="pr-head"><b>第 ' + (i + 1) + ' 节</b><span id="npdh-' + i + '">' + fmtDate(dd) + '</span></div>' +
       '<div class="pr-grid">' +
-      '<label>日期<input type="date" id="npdd-' + i + '" value="' + r.date + '" /></label>' +
+      '<label>日期<input type="date" id="npdd-' + i + '" value="' + r.date + '" onchange="pkgLessonDateChanged(' + i + ')" /></label>' +
       '<label>开始时间<input type="time" id="npds-' + i + '" value="' + r.start + '" /></label>' +
       '<label>结束时间<input type="time" id="npde-' + i + '" value="' + r.end + '" /></label>' +
       '<label style="flex:2 1 170px">本节 focus<input type="text" id="npdf-' + i + '" value="' + esc(r.focus || '') + '" placeholder="这一节的重点（可留空）" /></label>' +
       '</div></div>';
   }).join('');
   box.innerHTML = html;
+}
+/* 改了某一节的日期：同步草稿，并立刻刷新这一节标题行的星期 / 日期（写回中文原文，英文模式下由翻译层自动翻成英文，且切回中文时恢复的也是新日期） */
+function pkgLessonDateChanged(i){
+  var de = $('npdd-' + i); if(!de || !de.value) return;
+  if(pkgDraft && pkgDraft[i]) pkgDraft[i].date = de.value;
+  var hd = $('npdh-' + i); if(!hd) return;
+  var dp = de.value.split('-'); var dd = new Date(+dp[0], +dp[1] - 1, +dp[2]);
+  if(isNaN(dd.getTime())) return;
+  hd.textContent = (typeof __origFmtDate === 'function') ? __origFmtDate(dd) : fmtDate(dd);
 }
 /* 排课设置（节数 / 上课日 / 第一节日期 / 开始时间 / 时长）变了：已有草稿就按新设置重排 */
 function pkgPatternChanged(){
@@ -4033,7 +4042,8 @@ var EN_PATTERNS = [
   [/(\d{1,2})月(\d{1,2})日\s*周([一二三四五六日])/g, function(m, mo, d, w){ return WD_EN[w] + ', ' + MON_EN[+mo-1] + ' ' + d; }],
   [/(\d{1,2})月(\d{1,2})日/g, function(m, mo, d){ return MON_EN[+mo-1] + ' ' + d; }],
   [/第\s*(\d+)\s*节还没选日期/g, 'Lesson $1 still needs a date'],
-  [/第\s*(\d+)\s*节的时间不对：结束时间要晚于开始时间/g, 'Lesson $1 has an invalid time: the end must be after the start'],
+  [/第\s*(\d+)\s*节的时间不对：结束时间要晚于开始时间/g, 'Lesson $1: Invalid time — the end time must be after the start time'],
+  [/第\s*(\d+)\s*节的Invalid time: the end time must be after the start time/g, 'Lesson $1: Invalid time — the end time must be after the start time'],
   [/第\s*(\d+)\s*节/g, 'Lesson $1'],
   [/整套还剩\s*(\d+)\s*个名额/g, 'Only $1 spots left in the package'],
   [/还剩\s*(\d+)\s*个名额/g, 'Only $1 spots left'],
