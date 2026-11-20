@@ -622,6 +622,58 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 @media (prefers-reduced-motion: reduce){
   .tabbar button,.roleswitch button,.atabs button{ transition:none; }
 }
+
+/* =====================================================================
+   紧凑目录（解决「一门课占满一屏、要一直下拉」）
+   思路：卡片不再是大图 + 全段简介的竖版排法。
+   - 手机：横向小图列表，一屏看 3–4 门；简介只留 2 行（全文在预约页里有）；
+     顶部的 hero、快捷入口、本周课表入口全部压矮，目录更早出现。
+   - 分类筛选吸顶：滑到下面也能随时切换分类，不用滑回顶部。
+   - 电脑 / 平板：图片变矮、简介最多 3 行，整排卡片更短。
+   - 整张卡可点（点按钮以外的地方同样进预约），少找按钮。
+   ===================================================================== */
+.big-card .desc{ display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
+#catalog .chips{ position:sticky; top:0; z-index:8; background:var(--paper); border-bottom:1px solid var(--line); padding-top:10px; padding-bottom:10px; }
+#cardGrid .big-card{ cursor:pointer; }
+@media (min-width:700px){
+  .big-card>img{ height:138px; }
+}
+@media (max-width:699px){
+  /* 顶部三块压矮，目录提前出现 */
+  .hero{ height:108px; }
+  html[lang="en"] .hero{ height:124px; }
+  .hero .ht{ bottom:10px; }
+  .hero .ht h2{ font-size:19px; margin:0; }
+  .hero .ht p{ display:none; }
+  .hero .ht .open{ margin-bottom:6px; padding:3px 9px; }
+  .quick{ padding-top:10px; gap:8px; }
+  .quick button{ padding:8px 4px 7px; gap:4px; border-radius:13px; font-size:12.5px; }
+  .quick .qi{ width:30px; height:30px; border-radius:10px; }
+  .quick .qi svg{ width:17px; height:17px; }
+  .quick small{ display:none; }
+  .week-wrap{ padding-top:10px; }
+  .week-toggle{ padding:9px 12px; }
+  #catalog .pagehead{ padding-top:12px; }
+  #catalog .pagehead h2{ font-size:18px; }
+  #catalog .pagehead p{ font-size:11px; line-height:1.55; display:-webkit-box; -webkit-line-clamp:1; -webkit-box-orient:vertical; overflow:hidden; }
+  #catalog .chips{ padding-top:8px; padding-bottom:8px; }
+
+  /* 横向紧凑卡：一屏多门 */
+  #cardGrid{ gap:10px; }
+  #cardGrid .big-card{ flex-direction:row; border-radius:16px; }
+  #cardGrid .big-card>img{ width:102px; height:auto; align-self:stretch; flex:none; }
+  #cardGrid .big-card .bc{ padding:10px 12px 11px; min-width:0; }
+  .big-card h4{ font-size:15px; margin:4px 0 3px; }
+  .big-card .desc{ -webkit-line-clamp:2; font-size:11.5px; line-height:1.55; margin:0 0 6px; }
+  .big-card .meta{ font-size:11px; gap:3px 10px; }
+  .big-card .next-slot{ margin-top:8px; padding:7px 9px; border-radius:10px; gap:6px; flex-wrap:nowrap; }
+  .big-card .next-slot .ns{ font-size:11px; line-height:1.45; min-width:0; }
+  .big-card .next-slot .ns b{ font-size:11.5px; }
+  .big-card .next-slot .price{ font-size:15px !important; }
+  .big-card .bookbtn{ padding:6px 14px; font-size:12.5px; min-height:34px; }
+  /* 团课卡里逐节列表在小卡里太占地方，只留「共 N 节」说明，全文在报名页看 */
+  .big-card .pkgrow{ display:none; }
+}
 </style>
 </head>
 <body>
@@ -1807,6 +1859,8 @@ function renderCards(){
         '<div class="meta"><span>'+ICONS.clock+esc(it.dur)+'</span><span>'+ICONS.user+esc(it.teacher)+'</span></div>' +
         '<div class="next-slot">'+nsHtml+'</div>' + pkgHtml +
       '</div>';
+    /* 整张卡可点进预约（点「预约 / 报名」按钮本身走按钮自己的点击，不重复触发） */
+    card.addEventListener('click', function(e){ if(e.target.closest('button')) return; openBooking(it.id); });
     grid.appendChild(card);
   });
 }
