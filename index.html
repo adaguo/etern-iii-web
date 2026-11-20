@@ -488,15 +488,147 @@ html[lang="en"] .slot .st,html[lang="en"] .big-card h4,html[lang="en"] .mine-car
 html[lang="en"] .roster-group .gh b,html[lang="en"] .today-row .tm b,html[lang="en"] .week-row .wn b{ white-space:normal; line-height:1.45; }
 html[lang="en"] .field label,html[lang="en"] .steprow .sl{ line-height:1.5; }
 html[lang="en"] input,html[lang="en"] select,html[lang="en"] textarea{ font-family:"Source Sans 3","Noto Sans SC",system-ui,sans-serif; }
+
+/* =====================================================================
+   响应式外壳（简单版：只有「目录」和「我的」）
+   手机：全屏单列，跟着屏幕宽度走，不横滑、不截断；
+   电脑：内容铺开到宽版，目录卡片多列网格，导航移到顶部，
+   预约弹层居中成对话框。不再用手机框假装网页。
+   ===================================================================== */
+.stage{ padding:0; display:block; min-height:100dvh; }
+.phone{
+  width:100%; max-width:none; height:100dvh; margin:0;
+  border-radius:0; box-shadow:none;
+}
+.statusbar{ padding:10px 18px 0; }
+.statusbar .loc{ font-size:11px; font-weight:700; letter-spacing:.14em; color:var(--ink2); text-transform:uppercase; }
+.apphead{ border-bottom:1px solid var(--line); background:var(--paper); padding-top:10px; padding-bottom:12px; }
+.viewport{ width:100%; }
+#customerView,#adminView,#teacherView{ width:100%; }
+#pageBook{ width:100%; max-width:1180px; margin:0 auto; padding-bottom:8px; }
+#pageMine,#adminView,#teacherView{ max-width:920px; margin:0 auto; }
+.foot-note{ max-width:920px; margin:0 auto; }
+.dbbanner{ max-width:920px; margin-left:auto; margin-right:auto; }
+#customerView .dbbanner{ margin-left:18px; margin-right:18px; }
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{ outline:2px solid var(--brass); outline-offset:2px; }
+
+/* 目录卡片：手机 1 列 → 平板 2 列 → 电脑 3 列 */
+#cardGrid{ display:grid; grid-template-columns:minmax(0,1fr); gap:16px; padding:2px 18px 10px; }
+#cardGrid .big-card{ margin:0; display:flex; flex-direction:column; height:100%; }
+#cardGrid .big-card .bc{ flex:1; display:flex; flex-direction:column; }
+#cardGrid .big-card .next-slot{ margin-top:auto; }
+@media (min-width:700px){
+  #cardGrid{ grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .big-card>img{ height:172px; }
+}
+@media (min-width:1080px){
+  #cardGrid{ grid-template-columns:repeat(3,minmax(0,1fr)); gap:20px; }
+}
+
+/* ---------- 平板与电脑 ---------- */
+@media (min-width:700px){
+  .hero{ height:280px; margin:14px 18px 0; }
+  .hero .ht h2{ font-size:27px; }
+  .hero .ht p{ max-width:560px; font-size:13px; }
+  .quick{ gap:14px; padding-top:20px; }
+  .quick button{ padding:20px 10px 16px; font-size:14.5px; }
+  .sheet .dimg{ height:300px; }
+}
+@media (min-width:1024px){
+  /* 顶部区域与内容同宽居中 */
+  .statusbar,.apphead{ width:100%; max-width:1180px; margin:0 auto; }
+  .statusbar{ padding-top:12px; }
+  /* 底部 tab 在电脑上变成顶部的导航条（同一组按钮，不重复造） */
+  .tabbar{
+    order:2; width:100%; max-width:1180px; margin:0 auto;
+    justify-content:flex-start; gap:6px;
+    background:var(--paper); border-top:none; border-bottom:1px solid var(--line);
+    padding:8px 18px;
+  }
+  .apphead{ order:1; } .viewport{ order:3; }
+  .tabbar button{
+    flex:0 1 auto; flex-direction:row; gap:7px;
+    font-size:13.5px; padding:9px 20px; border-radius:999px; min-height:42px;
+  }
+  .tabbar button svg{ width:19px; height:19px; }
+  .tabbar button.on{ background:var(--ink); color:#f5efe0; }
+  .tabbar button.on svg{ stroke:#f5efe0; }
+  .tabbar .dot{ top:2px; right:6px; }
+  .hero{ height:330px; border-radius:26px; }
+  .hero .ht{ left:28px; right:28px; bottom:24px; }
+  .hero .ht h2{ font-size:32px; }
+  .hero .ht p{ font-size:13.5px; }
+  .pagehead h2{ font-size:24px; }
+  /* 预约 / 登录等弹层：电脑上居中成对话框，手机上仍是整页 */
+  .sheet{
+    left:50%; right:auto; width:min(680px,100%);
+    transform:translateX(-50%);
+    border-left:1px solid var(--line); border-right:1px solid var(--line);
+    box-shadow:0 0 70px rgba(30,25,10,.35);
+  }
+  .sheet.open{ animation:none; }
+  .toast{ max-width:480px; bottom:36px; }
+  .stat-grid{ grid-template-columns:1fr 1fr; }
+}
+
+/* ---------- 手机：按屏幕宽度自适应 ---------- */
+@media (max-width:699px){
+  .tabbar button{ min-height:48px; justify-content:center; }
+  .chips button,.bookbtn,.ghostbtn{ min-height:40px; }
+  .hero{ margin:6px 12px 0; }
+  .quick{ padding:14px 12px 0; }
+  .week-wrap{ padding:14px 12px 0; }
+  .sec{ padding-left:12px; padding-right:12px; }
+  .pagehead{ padding-left:12px; padding-right:12px; }
+  .chips{ padding-left:12px; padding-right:12px; }
+  #cardGrid{ padding-left:12px; padding-right:12px; }
+  .big-card{ margin-left:12px; margin-right:12px; }
+  #cardGrid .big-card{ margin:0; }
+  .mine-card,.wallet-card,.mgmt,.roster-group{ margin-left:12px; margin-right:12px; }
+  .whitebox,.formbox{ margin-left:12px; margin-right:12px; }
+  .profile{ margin-left:12px; margin-right:12px; }
+  .dbbanner{ margin-left:12px; margin-right:12px; }
+  .atabs-wrap{ padding-left:12px; padding-right:12px; }
+  .stat-grid,.qa-row{ padding-left:12px; padding-right:12px; }
+  .sheet .dbody{ padding-left:14px; padding-right:14px; }
+  .sheetfoot{ padding-left:14px; padding-right:14px; }
+}
+@media (max-width:420px){
+  .statusbar{ padding:8px 12px 0; }
+  .apphead{ padding:8px 12px 10px; gap:8px; }
+  .brand .disc{ width:30px; height:30px; }
+  .brand .bt strong{ font-size:14.5px; }
+  .brand .bt small{ font-size:9.5px; letter-spacing:.12em; }
+  .authbtn{ font-size:11.5px; padding:6px 10px; }
+  .langswitch button{ padding:4px 8px; font-size:11px; }
+  .hero{ height:200px; border-radius:18px; }
+  .hero .ht{ left:14px; right:14px; bottom:12px; }
+  .hero .ht h2{ font-size:20px; }
+  .hero .ht p{ font-size:11.5px; }
+  .quick{ gap:8px; }
+  .quick button{ padding:11px 4px 10px; font-size:12.5px; border-radius:14px; }
+  .quick .qi{ width:34px; height:34px; border-radius:11px; }
+  .quick small{ font-size:10px; line-height:1.45; }
+  .week-toggle{ padding:11px 12px; gap:9px; }
+  .week-toggle .wi{ width:34px; height:34px; }
+  .week-row .wt{ min-width:84px; font-size:11.5px; padding:5px 6px; }
+  .cal-day{ min-height:50px; padding:4px 3px; border-radius:9px; }
+  .cal-day .dsum2{ font-size:9px; }
+  .atabs button{ font-size:12px; padding:8px 4px; }
+  .sheetfoot .tot b{ font-size:17px; }
+  .success-wrap{ padding:24px 20px; }
+}
+@media (prefers-reduced-motion: reduce){
+  .tabbar button,.roleswitch button,.atabs button{ transition:none; }
+}
 </style>
 </head>
 <body>
 <div class="stage">
   <div class="phone" id="phone">
     <div class="statusbar">
-      <span id="clock">9:41</span>
+      <span class="loc">Bellevue, WA</span>
       <span class="langswitch" role="group" aria-label="Language / 语言切换"><button type="button" id="langBtnZh" onclick="setLang('zh')">中文</button><button type="button" id="langBtnEn" onclick="setLang('en')">English</button></span>
-      <span class="capsule"><i></i><i></i><i></i><span class="ring"></span></span>
     </div>
     <div class="apphead">
       <div class="brand">
@@ -548,7 +680,7 @@ html[lang="en"] input,html[lang="en"] select,html[lang="en"] textarea{ font-fami
         <section id="catalog">
           <div class="pagehead" style="padding-top:20px">
             <h2>预约目录</h2>
-            <p>价格均为美金（USD）。网页版经 Stripe 在线支付，支持信用卡、Apple Pay、Google Pay，也可以用钱包余额付款。下单先占位 15 分钟，付款成功才算约好；没付完名额会自动释放。店主端上架或改价，这里立刻同步。</p>
+            <p>价格均为美金（USD），在线支付或钱包余额均可。下单先占位 15 分钟，付款成功才算约好。</p>
           </div>
           <div class="chips" role="tablist" aria-label="分类">
             <button class="on" data-cat="all" onclick="setCat('all',this)">全部</button>
@@ -565,9 +697,8 @@ html[lang="en"] input,html[lang="en"] select,html[lang="en"] textarea{ font-fami
        <!-- ============ 顾客端 · 页面二：「我的」页（独立页面，与目录页完全分开） ============ -->
        <div id="pageMine" class="hidden">
         <div class="pagehead" style="padding-top:10px">
-          <button class="ghostbtn" onclick="goPage('book')">← 返回预约目录</button>
-          <h2 style="margin-top:14px">我的</h2>
-          <p>这一页只有你自己的内容：预约、钱包和个人资料，不会出现课程目录。想约新课，点上面的返回按钮或底部「预约」回到目录页。</p>
+          <h2>我的</h2>
+          <p>这里只有你自己的预约、钱包和资料。想约新课，点「预约」回目录页。</p>
         </div>
         <div class="atabs-wrap">
           <div class="atabs" role="tablist" aria-label="我的页面分区">
@@ -768,7 +899,7 @@ html[lang="en"] input,html[lang="en"] select,html[lang="en"] textarea{ font-fami
         <div id="teacherBody" style="padding-top:14px"></div>
       </div>
 
-      <p class="foot-note note-p" id="footSync">ETERN.III 手碟馆 · Bellevue, WA<br />网页版与小程序版按同一数据库设计：课程、场次、预约、课件与钱包余额同步，预约时名额以一次原子操作扣减。暂时没连上数据库时显示本机演示数据；连上后刷新即自动切换为真实数据。</p>
+      <p class="foot-note note-p" id="footSync">ETERN.III 手碟馆 · Bellevue, WA<br />网页版与小程序共用同一套课程、场次与预约数据。</p>
     </div><!-- /viewport -->
 
     <nav class="tabbar" aria-label="底部导航">
@@ -1474,7 +1605,7 @@ function loadAdminData(){
 function loadFromDB(){
   return sbReq('items?select=*&order=created_at.asc').then(function(itemRows){
     dbMode = true;
-    var fs = $('footSync'); if(fs) fs.innerHTML = 'ETERN.III 手碟馆 · Bellevue, WA<br />网页版与小程序版共用同一个数据库：课程、场次、预约、课件与钱包余额都实时同步；预约时名额在数据库里以一次原子操作扣减，防止重复预约。';
+    var fs = $('footSync'); if(fs) fs.innerHTML = 'ETERN.III 手碟馆 · Bellevue, WA<br />网页版与小程序共用同一套课程、场次与预约数据。';
     /* 页面只读库：不再自动往库里播种任何数据。库里的数据由 SQL 维护；库为空时目录就显示为空。 */
     return fetchCatalog().then(function(res){
       buildCatalog(res[0], res[1], res[2]);
@@ -3531,11 +3662,11 @@ var EN_MAP = {
 /* 本周课表 */
 '本周课表':'Weekly Schedule','下周课表':'Next Week','上周课表':'Last Week','课表':'Schedule','点一下展开，看本周每天有什么课':'See this week\u2019s classes','点一下展开看每天的课':'Tap to expand and see each day\u2019s classes','点一下展开':'Tap to expand','展开':'Expand','收起':'Collapse','上一周':'← Prev week','下一周 →':'Next week →','下一周':'Next week','上一周的课表':'Previous week schedule','看上一周的课表':'View last week\u2019s schedule','看下一周的课表':'View next week\u2019s schedule','切换周':'Switch week','回到本周':'Back to this week','本周':'This week','下周':'Next week','上周':'Last week','周后':'weeks later','周前':'weeks ago','暂时没有排课':'No classes scheduled','暂时没有课':'No classes for now','暂无课程':'No classes scheduled','这一周暂时没有课':'No classes this week','这天没有课':'No classes this day','点任意一节课，直接去约那一节（约课时再登录就行，看课表不用登录）。空间租用不在周课表里，在下面目录里自选时段。':'Tap a class to book it — no account needed to browse. For studio rental, pick a time under Booking below.','去约 ›':'Book ›','团课整套报名':'Full package enrollment','已约满':'Fully booked',
 /* 目录 */
-'预约目录':'Booking','价格均为美金（USD）。网页版经 Stripe 在线支付，支持信用卡、Apple Pay、Google Pay，也可以用钱包余额付款。下单先占位 15 分钟，付款成功才算约好；没付完名额会自动释放。店主端上架或改价，这里立刻同步。':'Prices in USD. Pay by card, Apple Pay, Google Pay, or wallet balance. We hold your spot for 15 minutes — your booking is confirmed once payment goes through.','全部':'All','分类':'Category','这个分类下暂时没有上架项目。':'Nothing is listed in this category yet.','最近场次':'Next session','最近一场已约满，点开看其他场次':'The next session is full — open to see other sessions','暂无场次，请留意店主端新增':'No sessions yet — watch for new ones from the owner','自选日期与时段 · 每天':'Pick your date & time · Open daily ','可约':'for booking','课程 / 活动占用的时段会自动避开':'Times taken by classes / events are blocked automatically','整套还剩':'Only ','本期已报满':'This round is fully booked','共':'Total ','点「报名」看全部时间与每节 focus':'Tap “Enroll” to see all dates and each lesson\u2019s focus','报名':'Enroll','预约':'Book','配图':' image',
+'预约目录':'Booking','价格均为美金（USD）。网页版经 Stripe 在线支付，支持信用卡、Apple Pay、Google Pay，也可以用钱包余额付款。下单先占位 15 分钟，付款成功才算约好；没付完名额会自动释放。店主端上架或改价，这里立刻同步。':'Prices in USD. Pay by card, Apple Pay, Google Pay, or wallet balance. We hold your spot for 15 minutes — your booking is confirmed once payment goes through.','价格均为美金（USD），在线支付或钱包余额均可。下单先占位 15 分钟，付款成功才算约好。':'Prices in USD. Pay online or with your wallet balance. We hold your spot for 15 minutes — your booking is confirmed once payment goes through.','全部':'All','分类':'Category','这个分类下暂时没有上架项目。':'Nothing is listed in this category yet.','最近场次':'Next session','最近一场已约满，点开看其他场次':'The next session is full — open to see other sessions','暂无场次，请留意店主端新增':'No sessions yet — watch for new ones from the owner','自选日期与时段 · 每天':'Pick your date & time · Open daily ','可约':'for booking','课程 / 活动占用的时段会自动避开':'Times taken by classes / events are blocked automatically','整套还剩':'Only ','本期已报满':'This round is fully booked','共':'Total ','点「报名」看全部时间与每节 focus':'Tap “Enroll” to see all dates and each lesson\u2019s focus','报名':'Enroll','预约':'Book','配图':' image',
 /* 标签 / 单位 / 状态 */
 '课程':'Class','活动':'Activity','空间':'Space','场地':'Venue','团课':'Package','手碟':'Handpan','瑜伽':'Yoga','普拉提':'Pilates','体验':'Trial','零基础':'Beginner','基础':'Foundation','进阶':'Advanced','曲目':'Repertoire','所有水平':'All levels','亲子':'Family','一对一':'1-on-1','整场租用':'Full-space rental','可容纳 30 人':'Fits up to 30 people','已确认':'Confirmed','已占位 · 待付款':'Held · Awaiting payment','已取消':'Cancelled','已上课':'Attended','未到场':'No-show','已上':'Done','待上':'Upcoming','已满':'Full','有空位':'Spots open','快满了（约满 70%）':'Almost full (70%+ booked)','快满了':'Almost full','上架中':'Live','已下架':'Unlisted','已付':'Paid','待付款':'Awaiting payment','待付':'Unpaid','就是你 · 当前登录账号':'This is you · Currently logged-in account','就是你':'This is you','未填写资料':'No profile info yet','还没填写':'Not filled in yet','未留姓名':'No name given',
 /* 我的页 */
-'我的预约':'My Bookings','我的钱包':'My Wallet','我的信息':'My Info','我的页面分区':'My page sections','返回预约目录':'\u2190 Back to Booking','← 返回预约目录':'\u2190 Back to Booking','这一页只有你自己的内容：预约、钱包和个人资料，不会出现课程目录。想约新课，点上面的返回按钮或底部「预约」回到目录页。':'Your bookings, wallet, and profile — nothing else. To book a class, head back to Booking.','取消后名额立即释放回对应场次；到店出示预约号即可。':'Cancelling releases the spot back to that session right away; just show your booking code at the studio.','待上的预约':'Upcoming bookings','单待上':' upcoming','你还没有预约。':'You have no bookings yet.','只有你自己下的单会出现在这里，去看看本周的课程和活动吧。':'Only bookings you placed appear here. Go check out this week\u2019s classes and events.','去约一节课':'Book a class','上课记录':'Class history','共':'','次 · 按时间从近到远':' visits · Newest first','还没有上课记录。等你上完第一节课，这里会记下时间、老师和出勤。':'No class history yet. After your first class, the time, teacher and attendance will be recorded here.','我的课件':'My Materials','份 · 来自我约过和上过的课':' files · From classes you booked or attended','约课后这里会出现课件':'Materials will appear here after you book','还没有课件。等你约的课上传了课件，或者上完一节有课件的课，这里就能直接打开。':'No materials yet. Once a class you booked uploads materials — or you finish a class that has them — you can open them right here.','课程课件 · 老师已上传':'Course materials · Uploaded by the teacher','本节课件 · 老师已上传':'This lesson\u2019s materials · Uploaded by the teacher','课程课件':'Course materials','本节课件':'This lesson\u2019s materials','打开':'Open','文件':'File','图片':'Image','文档':'Document',
+'我的预约':'My Bookings','我的钱包':'My Wallet','我的信息':'My Info','我的页面分区':'My page sections','返回预约目录':'\u2190 Back to Booking','← 返回预约目录':'\u2190 Back to Booking','这一页只有你自己的内容：预约、钱包和个人资料，不会出现课程目录。想约新课，点上面的返回按钮或底部「预约」回到目录页。':'Your bookings, wallet, and profile — nothing else. To book a class, head back to Booking.','这里只有你自己的预约、钱包和资料。想约新课，点「预约」回目录页。':'Your bookings, wallet, and profile only. To book a class, tap Booking to return to the catalog.','取消后名额立即释放回对应场次；到店出示预约号即可。':'Cancelling releases the spot back to that session right away; just show your booking code at the studio.','待上的预约':'Upcoming bookings','单待上':' upcoming','你还没有预约。':'You have no bookings yet.','只有你自己下的单会出现在这里，去看看本周的课程和活动吧。':'Only bookings you placed appear here. Go check out this week\u2019s classes and events.','去约一节课':'Book a class','上课记录':'Class history','共':'','次 · 按时间从近到远':' visits · Newest first','还没有上课记录。等你上完第一节课，这里会记下时间、老师和出勤。':'No class history yet. After your first class, the time, teacher and attendance will be recorded here.','我的课件':'My Materials','份 · 来自我约过和上过的课':' files · From classes you booked or attended','约课后这里会出现课件':'Materials will appear here after you book','还没有课件。等你约的课上传了课件，或者上完一节有课件的课，这里就能直接打开。':'No materials yet. Once a class you booked uploads materials — or you finish a class that has them — you can open them right here.','课程课件 · 老师已上传':'Course materials · Uploaded by the teacher','本节课件 · 老师已上传':'This lesson\u2019s materials · Uploaded by the teacher','课程课件':'Course materials','本节课件':'This lesson\u2019s materials','打开':'Open','文件':'File','图片':'Image','文档':'Document',
 /* 钱包 */
 '钱包余额':'Wallet Balance','充值后约课直接扣':'Top up and pay bookings directly','先填好个人资料（姓名 + 手机号），钱包就会按你的手机号归户，可以提前充值，约课时用余额付款。':'Fill in your profile first (name + phone). Your wallet is tied to your phone number, so you can top up in advance and pay for bookings from your balance.','先填资料':'Fill in profile first','约课时选「余额支付」直接扣这里的钱，扣完实时更新；用余额付的预约取消后，钱自动退回这里。':'Choose “Pay with balance” when booking and the money is deducted here, updated in real time. If you cancel a balance-paid booking, the money returns here automatically.','充值':'Top up','最近流水':'Recent activity','还没有充值或消费记录。':'No top-ups or spending yet.','自己充值':'Self top-up','店主代充':'Owner top-up','余额支付':'Pay with balance','取消退款':'Cancellation refund','余额':'Balance','现金':'Cash','线下转账':'Bank transfer','其他方式':'Other','其他':'Other','微信支付':'WeChat Pay','信用卡':'Credit card','借记卡':'Debit card','Stripe · 信用卡':'Stripe · Credit card','Stripe · 微信支付':'Stripe · WeChat Pay',
 /* 个人资料 / 账号卡 */
@@ -3575,7 +3706,7 @@ var EN_MAP = {
 /* 老师工作台 */
 '老师工作台':'Teacher Studio','只显示你教的课：看每节的学员名单和出勤，改每节的内容（focus、介绍）和课件。':'Shows only the classes you teach: view each lesson\u2019s roster and attendance, and edit each lesson\u2019s content (focus, intro) and materials.','退出老师端':'Exit teacher studio',' · 这里只显示你教的课：看名单、点出勤、改每节内容和课件。营收、改价、店主管理不在这里。':' · Only your classes are shown here: view rosters, mark attendance, and edit each lesson\u2019s content and materials. Revenue, pricing and owner management are not here.','暂时没有挂在你名下的课程。店主在管理页把课程的老师设为你的名字后，这里就会出现。':'No courses are under your name yet. Once the owner sets a course\u2019s teacher to your name on the Manage page, it will appear here.','个场次':' sessions','已到':'Here','未到':'Absent','这一节还没有学员预约。':'No students have booked this lesson yet.','已标记：已到':'Marked: present','已标记：未到':'Marked: absent','编辑本节':'Edit lesson','本节 focus：':'This lesson\u2019s focus: ','课程课件':'Course materials',' 个 · 整门课的课件在店主端管理页维护，本节课件在「编辑本节」里改':' · Course-wide materials are managed on the owner\u2019s Manage page; this lesson\u2019s materials are edited under “Edit lesson”','已退出老师端':'Exited the teacher studio','你现在的身份是顾客，老师工作台只有老师账号能进。':'Your role is customer — the teacher studio is only open to teacher accounts.','你的老师账号还没填对应的老师名字，请店主在店主端「账号权限」里补上。':'Your teacher account has no teacher name yet — ask the owner to add it under “Accounts & Roles” in the owner dashboard.','店主已登录：老师能做的事在店主端也能做。如需进老师工作台，请在「账号权限」里给店主账号填老师名字。':'You\u2019re logged in as owner: everything a teacher can do is also available in the owner dashboard. To enter the teacher studio, add a teacher name to the owner account under “Accounts & Roles”.','，店主端只有店主账号能进。身份由店主在店主端改。':', the owner dashboard is only open to owner accounts. Roles are changed by the owner in the dashboard.','你现在的身份是':'Your current role is ',
 /* 底部导航 / 页脚 / 横幅 */
-'底部导航':'Bottom navigation','预约':'Book','我的':'My','工作台':'Studio','ETERN.III 手碟馆 · Bellevue, WA':'ETERN.III Handpan Studio · Bellevue, WA','网页版与小程序版按同一数据库设计：课程、场次、预约、课件与钱包余额同步，预约时名额以一次原子操作扣减。暂时没连上数据库时显示本机演示数据；连上后刷新即自动切换为真实数据。':'Web and mini program share one database — classes, sessions, bookings, materials, and balances stay in sync.','网页版与小程序版共用同一个数据库：课程、场次、预约、课件与钱包余额都实时同步；预约时名额在数据库里以一次原子操作扣减，防止重复预约。':'Web and mini program share one database — classes, sessions, bookings, materials, and balances stay in sync.','暂时没连上数据库：现在显示的是本机演示数据，预约和充值只在本页里有效、不会写进数据库。刷新页面会重新尝试连接真实数据库。':'Database offline — showing demo data. Bookings and top-ups here won\u2019t be saved. Refresh to reconnect.','正在从数据库加载课程与场次…':'Loading courses and sessions from the database…',
+'底部导航':'Bottom navigation','预约':'Book','我的':'My','工作台':'Studio','ETERN.III 手碟馆 · Bellevue, WA':'ETERN.III Handpan Studio · Bellevue, WA','网页版与小程序版按同一数据库设计：课程、场次、预约、课件与钱包余额同步，预约时名额以一次原子操作扣减。暂时没连上数据库时显示本机演示数据；连上后刷新即自动切换为真实数据。':'Web and mini program share one database — classes, sessions, bookings, materials, and balances stay in sync.','网页版与小程序版共用同一个数据库：课程、场次、预约、课件与钱包余额都实时同步；预约时名额在数据库里以一次原子操作扣减，防止重复预约。':'Web and mini program share one database — classes, sessions, bookings, materials, and balances stay in sync.','网页版与小程序共用同一套课程、场次与预约数据。':'Web and mini program share the same classes, sessions, and bookings.','暂时没连上数据库：现在显示的是本机演示数据，预约和充值只在本页里有效、不会写进数据库。刷新页面会重新尝试连接真实数据库。':'Database offline — showing demo data. Bookings and top-ups here won\u2019t be saved. Refresh to reconnect.','正在从数据库加载课程与场次…':'Loading courses and sessions from the database…',
 /* 预约 / 钱包动作提示 */
 '请先选择一个场次':'Please choose a session first','请填写手机号，店主靠它认人':'Please enter your phone number — the owner identifies you by it','其中有一节名额不够了，整套暂时报不了':'One lesson in the set doesn\u2019t have enough spots left — the package can\u2019t be booked right now','这个时段刚刚被占用了，请换一个时间':'That time was just taken — please pick another','刚刚被约走了，名额不足，请换一场':'Those spots were just booked — not enough left, please pick another session','刚刚被约满了，请换一场':'That session just filled up — please pick another','预约没成功，请稍后再试':'Booking failed — please try again later','余额不足，还差':'Insufficient balance — you still need ','，请先充值再约':' — please top up first, then book','先填姓名和手机号，钱包按手机号认人':'Enter your name and phone first — the wallet is tied to your phone number','已充值':'Topped up ','，当前余额':' — current balance ','取消没成功，请稍后再试':'Cancellation failed — please try again later','正在取消…':'Cancelling…','已取消，':'Cancelled — ',' 已退回钱包余额，名额已释放':' refunded to your wallet balance, and the spot has been released','已取消，名额已释放回该场次':'Cancelled — the spot has been released back to that session','团课已整套取消，':'Package cancelled in full — ',' 节名额全部释放':' lessons\u2019 spots all released','，费用已退回钱包余额':', and the fee has been refunded to your wallet balance','余额支付 · ':'Balance payment · ','取消退款 · ':'Cancellation refund · ','网页版 Stripe 充值':'Web Stripe top-up','店主代充 · ':'Owner top-up · ','收款':' received',
 /* 场次 / 名额提示 */
