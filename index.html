@@ -1400,7 +1400,7 @@ function syncPhoneLink(phoneFromForm){
   if(authProfile && authProfile.display_name && !myProfile.name) myProfile.name = authProfile.display_name;
   /* 按手机号找/建 customer，并写 auth_user_id 关联登录账号 */
   return ensureCustomer(myProfile.name || nm || '', phone).then(function(c){
-    if(dbMode && c && c.id && authUser && c.auth_user_id !== authUser.id){
+    if(dbMode && c && c.id && authUser && !c.auth_user_id){
       dbFire(sbReq('customers?id=eq.' + c.id, { method:'PATCH', body:{ auth_user_id: authUser.id } }));
       c.auth_user_id = authUser.id;
     }
@@ -1465,6 +1465,9 @@ function doLogout(){
   var tok = authToken;
   authUser = null; authToken = null; authProfile = null; adminUnlocked = false; adminLocked = false; teacherName = null; teacherBookings = [];
   myCustomer = null; bookings = dbMode ? [] : bookings; walletState = { balanceCents: 0, txns: [] };
+  var _ae = $('authEmail'); if(_ae) _ae.value = '';
+  var _ap = $('authPassword'); if(_ap) _ap.value = '';
+  var _aph = $('authPhone'); if(_aph) _aph.value = '';
   updateAuthBtn();
   switchView('customer'); showPage('book');
   if(location.hash !== '#/book') location.hash = '#/book';
@@ -1756,7 +1759,7 @@ function ensureCustomer(name, phone){
     if(c){
       var patch = {};
       if(name && c.name !== name) patch.name = name;
-      if(typeof authUser !== 'undefined' && authUser && c.auth_user_id !== authUser.id) patch.auth_user_id = authUser.id;
+      if(typeof authUser !== 'undefined' && authUser && !c.auth_user_id) patch.auth_user_id = authUser.id;
       if(Object.keys(patch).length) dbFire(sbReq('customers?id=eq.' + c.id, { method: 'PATCH', body: patch }));
       myCustomer = c;
       return refreshWallet().then(function(){ return myCustomer; });
