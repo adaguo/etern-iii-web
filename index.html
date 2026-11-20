@@ -1468,6 +1468,8 @@ function doLogout(){
   var _ae = $('authEmail'); if(_ae) _ae.value = '';
   var _ap = $('authPassword'); if(_ap) _ap.value = '';
   var _aph = $('authPhone'); if(_aph) _aph.value = '';
+  /* 同时清掉 myProfile 的姓名和电话：否则重新打开登录框时，电话会从旧的 myProfile 里又被填回去 */
+  myProfile.name = ''; myProfile.phone = '';
   updateAuthBtn();
   switchView('customer'); showPage('book');
   if(location.hash !== '#/book') location.hash = '#/book';
@@ -2667,7 +2669,22 @@ function bookPackageDB(it, pay, total){
 function afterBooked(it, b){
   var code = b.code, pay = b.pay;
   var s = b.sessId ? findSess(it, b.sessId) : null;
-  if(!s && b.startsAt) s = { date: b.startsAt, time: '' };
+  if(!s && b.startsAt){
+    /* 单节课：场次不在内存列表里时，用预约自带的开始时间兜底 */
+    var sd = new Date(b.startsAt);
+    s = { date: sd, time: fmtMin(sd.getHours()*60 + sd.getMinutes()) };
+  }
+  if(!s && bkState && bkState.vDate){
+    /* 场馆一次性场次是刚建的，不在内存场次列表里：用本次预约自己选的日期、开始时间和时长兜底显示 */
+    var vd = new Date(bkState.vDate);
+    var vt = '';
+    if(bkState.vStart != null){
+      vd.setHours(Math.floor(bkState.vStart/60), bkState.vStart%60, 0, 0);
+      vt = fmtMin(bkState.vStart) + '–' + fmtMin(bkState.vStart + (bkState.vDur || b.hours || 1) * 60);
+    }
+    s = { date: vd, time: vt };
+  }
+  if(!s) s = { date: new Date(), time: '' }; /* 预约已经建好：成功页绝不能再因为找不到场次而报错 */
   renderCards(); renderMy(); renderAdmin();
   closeSheet();
   $('successSheet').innerHTML =
