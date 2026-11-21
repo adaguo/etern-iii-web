@@ -1510,6 +1510,7 @@ function syncPhoneLink(phoneFromForm){
     var nm0 = (authProfile && (authProfile.display_name || authProfile.name)) || myProfile.name || '';
     if(nm0 && !myProfile.name) myProfile.name = nm0;
     return ensureCustomer(myProfile.name || nm0 || '', '', em0).then(function(c){
+      if(c && c.name) myProfile.name = c.name; /* 姓名以本人顾客记录里的为准，读回显示 */
       if(c && c.email && !myProfile.email) myProfile.email = c.email;
     }).catch(function(){});
   }
@@ -1521,6 +1522,7 @@ function syncPhoneLink(phoneFromForm){
   if(authProfile && authProfile.display_name && !myProfile.name) myProfile.name = authProfile.display_name;
   /* 按手机号找/建 customer（登录邮箱也参与匹配，任一对上即同一人），并写 auth_user_id 关联登录账号 */
   return ensureCustomer(myProfile.name || nm || '', phone, (authUser && authUser.email) || myProfile.email || '').then(function(c){
+    if(c && c.name) myProfile.name = c.name; /* 姓名以本人顾客记录里的为准，读回显示 */
     if(c && c.email && !myProfile.email) myProfile.email = c.email;
     if(dbMode && c && c.id && authUser && !c.auth_user_id){
       dbFire(sbReq('customers?id=eq.' + c.id, { method:'PATCH', body:{ auth_user_id: authUser.id } }));
@@ -1537,6 +1539,7 @@ function applyProfileToMine(){
   }
   if(authUser && authUser.email && !myProfile.email) myProfile.email = authUser.email;
   if(typeof myCustomer !== 'undefined' && myCustomer){
+    if(myCustomer.name && !myProfile.name) myProfile.name = myCustomer.name;
     if(myCustomer.phone && !myProfile.phone) myProfile.phone = myCustomer.phone;
     if(myCustomer.email && !myProfile.email) myProfile.email = myCustomer.email;
   }
@@ -1743,7 +1746,14 @@ function mapBookingRow(r){
     startsAt: r.starts_at ? new Date(r.starts_at) : null, isVenue: !!r.is_venue };
   b.pay = payLabelOf(b);
   if(b.itemId){ var pit = findItem(b.itemId); if(pit && pit.cat === 'package') b.pkg = b.code.replace(/-\d+$/, ''); if(pit && pit.cat === 'venue' && !b.hours && pit.price > 0) b.hours = Math.max(1, Math.round(b.total / pit.price)); }
-  b.mine = !!(typeof myProfile !== 'undefined' && ((myProfile.phone && b.phone === myProfile.phone) || (myProfile.email && b.email && b.email === myProfile.email) || (typeof myCustomer !== 'undefined' && myCustomer && myCustomer.id && b.custId === myCustomer.id)));
+  /* 「是我的单」只认本人顾客记录 id（登录账号绑定的那条）：手机号 / 邮箱可能和
+     别人相同或共用，按它认会把别人的单算成我的。演示模式没有账号绑定、顾客
+     id 为空，才退回按资料里的手机号 / 邮箱认。 */
+  if(typeof dbMode !== 'undefined' && dbMode){
+    b.mine = !!(typeof myCustomer !== 'undefined' && myCustomer && myCustomer.id && b.custId === myCustomer.id);
+  } else {
+    b.mine = !!(typeof myProfile !== 'undefined' && ((myProfile.phone && b.phone === myProfile.phone) || (myProfile.email && b.email && b.email === myProfile.email) || (typeof myCustomer !== 'undefined' && myCustomer && myCustomer.id && b.custId === myCustomer.id)));
+  }
   return b;
 }
 var allBookings = [];   /* 店主端全量预约：仅店主解锁后才从库里加载，普通访客不会收到全量名单 */
@@ -1800,7 +1810,7 @@ function consolidateSingleSpace(){
 }
 function deriveHistory(){
   myHistory = [];
-  if(!dbMode || (!myProfile.phone && !myProfile.email)) return;
+  if(!dbMode || ((!myProfile.phone && !myProfile.email) && !(typeof myCustomer !== 'undefined' && myCustomer && myCustomer.id))) return;
   var today = new Date(); today.setHours(0, 0, 0, 0);
   bookings.forEach(function(b){
     if(!b.mine || b.status === 'cancelled' || !b.itemId) return;
@@ -1852,14 +1862,39 @@ function fetchCatalog(){
     return res;
   });
 }
+/* 本人顾客记录只按登录账号绑定认：customers.auth_user_id = 登录账号 id。
+   绝不按手机号 / 邮箱认本人——手机号 / 邮箱可能和别人相同或共用，按它匹配会把
+   别人的记录（姓名、钱包、预约、通知）认成自己的（店主登录后看到顾客的充值
+   通知就是这么串号的）。按手机号 / 邮箱找人只留给店主代充时查客户用。 */
+function findMyCustomer(){
+  if(typeof authUser === 'undefined' || !authUser || !authUser.id) return Promise.resolve(null);
+  return sbReq('customers?select=*&auth_user_id=eq.' + encodeURIComponent(authUser.id))
+    .then(function(rows){ return (rows && rows.length) ? rows[0] : null; })
+    .catch(function(){ return null; });
+}
+/* 把一条顾客记录认成本人的：绑定的是别人账号的记录绝不认；认下时把记录里的
+   姓名读回 myProfile——资料保存时姓名就写在 customers.name 里，刷新后靠账号
+   绑定找回这条记录，姓名就能显示出来，不再依赖手机号 / 邮箱对不对得上。 */
+function adoptMyCustomer(c){
+  if(!c) return null;
+  if(c.auth_user_id && (typeof authUser === 'undefined' || !authUser || c.auth_user_id !== authUser.id)){
+    if(myCustomer && myCustomer.id === c.id) myCustomer = null;
+    return null;
+  }
+  myCustomer = c;
+  if(c.name) myProfile.name = c.name;
+  if(c.phone && !myProfile.phone) myProfile.phone = c.phone;
+  if(c.email && !myProfile.email) myProfile.email = c.email;
+  return c;
+}
 function loadMine(){
-  /* 只查当前手机号 / 邮箱自己的 customer + bookings，绝不把全量名单下发给普通访客 */
-  if(!dbMode || (!myProfile.phone && !myProfile.email)) return Promise.resolve();
-  return findCustomer(myProfile.phone, myProfile.email).then(function(c){
-    if(!c){ bookings = []; deriveHistory(); return; }
-    myCustomer = c;
-    if(c.phone && !myProfile.phone) myProfile.phone = c.phone;
-    if(c.email && !myProfile.email) myProfile.email = c.email;
+  /* 只查登录账号本人绑定的 customer + bookings，绝不把全量名单下发给普通访客；
+     定本人只走 findMyCustomer（按 auth_user_id），不按手机号 / 邮箱匹配 */
+  if(!dbMode) return Promise.resolve();
+  if(!authUser){ bookings = []; myNotifications = []; return Promise.resolve(); }
+  return findMyCustomer().then(function(c){
+    if(!c){ bookings = []; myNotifications = []; deriveHistory(); return; }
+    adoptMyCustomer(c);
     custMap = {}; custMap[c.id] = c;
     return sbReq('bookings?select=*&customer_id=eq.' + c.id + '&order=created_at.desc').then(function(rows){
       bookings = (rows || []).map(mapBookingRow);
@@ -1940,7 +1975,12 @@ function ensureCustomer(name, phone, email){
     walletState = { balanceCents: lw.balanceCents, txns: lw.txns };
     return Promise.resolve(myCustomer);
   }
-  return findCustomer(phone, email).then(function(c){
+  /* 先按登录账号绑定找本人记录，找到就更新它；按手机号 / 邮箱找到的记录若已绑定
+     别人账号，绝不认成自己的、更不改它的绑定，按「没找到」处理，给本人另建一条
+     绑定自己的记录。未绑定的旧记录才允许认领并补上绑定，且等绑定写完再继续，
+     免得紧接着按绑定读时还读不到。 */
+  var claimOrCreate = function(c){
+    if(c && c.auth_user_id && (typeof authUser === 'undefined' || !authUser || c.auth_user_id !== authUser.id)) c = null; /* 别人的记录：当作没找到 */
     if(c){
       var patch = {};
       if(name && c.name !== name) patch.name = name;
@@ -1948,33 +1988,48 @@ function ensureCustomer(name, phone, email){
       if(email && !c.email) patch.email = email;
       if(phone && !c.phone) patch.phone = phone;
       if(typeof authUser !== 'undefined' && authUser && !c.auth_user_id) patch.auth_user_id = authUser.id;
-      if(Object.keys(patch).length){
-        dbFire(sbReq('customers?id=eq.' + c.id, { method: 'PATCH', body: patch }));
-        Object.keys(patch).forEach(function(k){ c[k] = patch[k]; });
-      }
-      myCustomer = c;
-      return refreshWallet().then(function(){ return myCustomer; });
+      var applyPatch = Object.keys(patch).length
+        ? sbReq('customers?id=eq.' + c.id, { method: 'PATCH', body: patch }).then(function(){ Object.keys(patch).forEach(function(k){ c[k] = patch[k]; }); }, function(){ Object.keys(patch).forEach(function(k){ c[k] = patch[k]; }); })
+        : Promise.resolve();
+      return applyPatch.then(function(){
+        adoptMyCustomer(c);
+        return refreshWallet().then(function(){ return myCustomer; });
+      });
     }
     var newBody = { phone: phone || null, email: email || null, name: name || null };
     if(typeof authUser !== 'undefined' && authUser) newBody.auth_user_id = authUser.id;
     return sbReq('customers', { method: 'POST', body: newBody, prefer: 'return=representation' }).then(function(created){
-      myCustomer = created[0];
+      adoptMyCustomer(created[0]);
       return refreshWallet().then(function(){ return myCustomer; });
     });
-  });
+  };
+  if(typeof authUser !== 'undefined' && authUser){
+    return findMyCustomer().then(function(mine){
+      if(mine) return claimOrCreate(mine);
+      return findCustomer(phone, email).then(claimOrCreate);
+    });
+  }
+  return findCustomer(phone, email).then(claimOrCreate);
 }
 function refreshWallet(){
-  if(!myProfile.phone && !myProfile.email) return Promise.resolve();
   if(!dbMode){
+    if(!myProfile.phone && !myProfile.email) return Promise.resolve();
     var f1 = lwFind(myProfile.phone, myProfile.email);
     var lw = f1.lw || (localWallet[f1.key] = { name: myProfile.name || '', balanceCents: 0, txns: [], phone: myProfile.phone || '', email: myProfile.email || '' });
     walletState = { balanceCents: lw.balanceCents, txns: lw.txns };
     if(myCustomer) myCustomer.balance_cents = lw.balanceCents;
     return Promise.resolve();
   }
-  return findCustomer(myProfile.phone, myProfile.email).then(function(c){
-    if(c){ myCustomer = c; walletState.balanceCents = c.balance_cents || 0; }
-    if(!myCustomer) return;
+  if(!authUser && !(myCustomer && myCustomer.id)) return Promise.resolve();
+  /* 钱包只认本人记录：已认定的本人记录按它自己的 id 读最新余额，还没认定就按
+     登录账号绑定找。绝不按手机号 / 邮箱重新匹配——共用手机号 / 邮箱时会把
+     别人的钱包认成自己的（店主代充后走的也是这里，更不能串到被充客户身上）。 */
+  var startW = (myCustomer && myCustomer.id && !(myCustomer.auth_user_id && authUser && myCustomer.auth_user_id !== authUser.id))
+    ? sbReq('customers?select=*&id=eq.' + encodeURIComponent(myCustomer.id)).then(function(rows){ return (rows && rows.length) ? rows[0] : myCustomer; }).catch(function(){ return myCustomer; })
+    : findMyCustomer();
+  return startW.then(function(c){
+    if(c && adoptMyCustomer(c)) walletState.balanceCents = c.balance_cents || 0;
+    if(!myCustomer){ walletState = { balanceCents: 0, txns: [] }; return; }
     return sbReq('wallet_transactions?select=*&customer_id=eq.' + myCustomer.id + '&order=created_at.desc&limit=50')
       .then(function(txns){ walletState.txns = txns || []; })
       .catch(function(){ walletState.txns = []; });
@@ -2038,10 +2093,19 @@ function loadMyNotifications(){
     myNotifications = key ? (localNotifs[key] || []).slice() : [];
     return Promise.resolve();
   }
-  if(!myCustomer || !myCustomer.id){ myNotifications = []; return Promise.resolve(); }
-  return sbReq('notifications?select=*&customer_id=eq.' + myCustomer.id + '&channel=eq.inapp&order=created_at.desc&limit=20')
-    .then(function(rows){ myNotifications = rows || []; })
-    .catch(function(){ myNotifications = []; });
+  /* 站内通知只按本人顾客记录取：先按登录账号绑定（auth_user_id）定本人
+     customers.id，再按这个 id 查通知。绝不按手机号 / 邮箱定人——共用或相同的
+     手机号 / 邮箱会串到别人的通知（店主看到顾客充值通知就是这条路径出的事）。 */
+  if(!authUser){ myNotifications = []; return Promise.resolve(); }
+  var ownCust = (myCustomer && myCustomer.id && !(myCustomer.auth_user_id && myCustomer.auth_user_id !== authUser.id))
+    ? Promise.resolve(myCustomer)
+    : findMyCustomer().then(function(c){ return c ? adoptMyCustomer(c) : null; });
+  return ownCust.then(function(c){
+    if(!c || !c.id){ myNotifications = []; return; }
+    return sbReq('notifications?select=*&customer_id=eq.' + c.id + '&channel=eq.inapp&order=created_at.desc&limit=20')
+      .then(function(rows){ myNotifications = rows || []; })
+      .catch(function(){ myNotifications = []; });
+  });
 }
 function markNotifRead(id){
   var n = null;
@@ -3973,8 +4037,10 @@ function ownerDoTopup(){
     toast('已给 ' + ident + ' 充值 ' + money(amt) + '（' + methodLabel + '），TA 那边立刻能看到');
     renderOwnerTopups();
     ownerFindCustomer();
+    /* 充完只有在「被充的正是登录账号本人绑定的那条顾客记录」时才重读我的通知：
+       只比对顾客记录 id，绝不按手机号 / 邮箱是否相同来判断——店主给顾客充值时
+       两边手机号 / 邮箱相同也不能把顾客的通知读进店主的「我的」。 */
     if(myCustomer && owPending && owPending.cust && myCustomer.id && owPending.cust.id === myCustomer.id) loadMyNotifications().then(function(){ renderMy(); });
-    else if(custKeyOf(myProfile.phone, myProfile.email) === ident) loadMyNotifications().then(function(){ renderMy(); });
   }).catch(function(e){ toastDbErr('充值没成功，请稍后再试', e); });
 }
 function ownerTopupRow(phone, t){
