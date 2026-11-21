@@ -739,6 +739,25 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
   /* 团课卡里逐节列表在小卡里太占地方，只留「共 N 节」说明，全文在报名页看 */
   .big-card .pkgrow{ display:none; }
 }
+
+/* ---------- 场次编辑：日期 / 时间显示框 ----------
+   原生 date/time 控件的显示格式跟手机系统语言走（中文界面也会显示 Nov 29, 2026），
+   而且在手机上会按自身宽度撑出容器、两个时间框互相重叠。所以编辑页里原生控件
+   只负责取值和弹出系统选择器（透明盖在显示框上，点哪里都能打开选择器），
+   页面上真正显示的是 .dttext 里的文字，由 JS 按界面语言格式化：
+   中文「2026年11月29日 / 上午10:00」，英文「Nov 29, 2026 / 10:00 AM」。 */
+.dtwrap{ position:relative; overflow:hidden; border-radius:12px; }
+.dtwrap .dttext{ display:block; border:1.4px solid var(--line); background:var(--card); border-radius:12px; padding:11px 13px; font-size:14px; line-height:1.45; color:var(--ink); min-height:48px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.dtwrap input{ position:absolute; inset:0; width:100%; height:100%; opacity:0; cursor:pointer; }
+.dtwrap:focus-within .dttext{ border-color:var(--brass); }
+
+/* ---------- 手机自适应兜底 ----------
+   其余原生日期 / 时间控件（上架团课、加场次等表单）一律不许撑宽容器；
+   名单里学员的手机号 / 邮箱长串可断行，不顶出卡片；
+   老师工作台的摘要行 / 场次行在窄屏上可换行，日期时间不被挤掉。 */
+input[type="date"],input[type="time"]{ max-width:100%; min-width:0; }
+.person .pm small{ overflow-wrap:anywhere; }
+#teacherBody .sesssum,#teacherBody .sessrow-head{ flex-wrap:wrap; row-gap:2px; }
 </style>
 </head>
 <body>
@@ -901,7 +920,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
         <!-- 营收 -->
         <div id="atab-rev" class="hidden">
           <div class="pagehead" style="padding-top:14px">
-            <p>只统计未取消的预约。已付 = 已通过 Stripe 或钱包余额收款；待付 = 已占位还没付款的单，占位 15 分钟未付会自动释放名额，不用追着收钱。</p>
+            <p>只统计未取消的预约。已付 = 已通过 Stripe、钱包余额或到店付款（线下已收、经老师 / 馆主确认）收款；待付 = 已占位还没付款的单，占位 15 分钟未付会自动释放名额，不用追着收钱。到店付款未确认前先计在待付里，确认后转入已付。</p>
           </div>
           <div id="revStats"></div>
           <div class="whitebox">
@@ -980,11 +999,11 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
         <!-- 客户充值（店主代充，入口只在店主端） -->
         <div id="atab-wallet" class="hidden">
           <div class="pagehead" style="padding-top:14px">
-            <p>客人线下把钱给你（比如现金或转账收到 $200）之后，在这里按手机号或邮箱找到 TA、输金额充值，钱立刻进 TA 的钱包余额，TA 在自己那边马上能看到。每一笔代充都会写进流水：谁充的、给谁充、多少钱、什么时候、怎么收的钱。</p>
+            <p>客人线下把钱给你（比如现金或转账收到 $200）之后，在这里按手机号、邮箱或会员编号（用户 ID 前 8 位）找到 TA、输金额充值，钱立刻进 TA 的钱包余额，TA 在自己那边马上能看到。每一笔代充都会写进流水：谁充的、给谁充、多少钱、什么时候、怎么收的钱。</p>
           </div>
           <div class="formbox" style="margin-top:14px">
             <h4>给客户充值</h4>
-            <div class="field"><label for="owPhone">客户手机号或邮箱</label><input id="owPhone" type="text" placeholder="输入客户手机号或邮箱查找" /></div>
+            <div class="field"><label for="owPhone">客户手机号、邮箱或会员编号</label><input id="owPhone" type="text" placeholder="输入手机号、邮箱或会员编号（ID 前 8 位）查找" /></div>
             <button class="submit" style="background:var(--ink)" type="button" onclick="ownerFindCustomer()">查找客户</button>
             <div id="owResult"></div>
           </div>
@@ -1111,10 +1130,10 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
         <div class="dbody" style="padding-top:62px">
           <h2 class="serif" style="margin-top:0">编辑这一节课</h2>
           <p class="ddesc" id="seWhen"></p>
-          <div class="field"><label for="seDate">本节日期</label><input id="seDate" type="date" /></div>
+          <div class="field"><label for="seDate">本节日期</label><div class="dtwrap"><span class="dttext" id="seDateText"></span><input id="seDate" type="date" onchange="syncSessDtText()" /></div></div>
           <div class="se-timerow">
-            <div class="field"><label for="seStart">开始时间</label><input id="seStart" type="time" /></div>
-            <div class="field"><label for="seEnd">结束时间</label><input id="seEnd" type="time" /></div>
+            <div class="field"><label for="seStart">开始时间</label><div class="dtwrap"><span class="dttext" id="seStartText"></span><input id="seStart" type="time" onchange="syncSessDtText()" /></div></div>
+            <div class="field"><label for="seEnd">结束时间</label><div class="dtwrap"><span class="dttext" id="seEndText"></span><input id="seEnd" type="time" onchange="syncSessDtText()" /></div></div>
           </div>
           <div class="field"><label for="seFocus">本节 focus（这节课的重点）</label><input id="seFocus" placeholder="如：双手配合与律动" /></div>
           <div class="field"><label for="seNote">本节介绍（要讲什么）</label><textarea id="seNote" placeholder="这节课会讲什么、练什么，报了这节课的学员会看到"></textarea></div>
@@ -1511,7 +1530,7 @@ function syncPhoneLink(phoneFromForm){
     if(nm0 && !myProfile.name) myProfile.name = nm0;
     return ensureCustomer(myProfile.name || nm0 || '', '', em0).then(function(c){
       if(c && c.name) myProfile.name = c.name; /* 姓名以本人顾客记录里的为准，读回显示 */
-      if(c && c.email && !myProfile.email) myProfile.email = c.email;
+      if(c && c.email && !myProfile.email && !(authUser && authUser.email)) myProfile.email = c.email; /* 邮箱只认登录账号自己的，不从认领到的记录里带别人的 */
     }).catch(function(){});
   }
   myProfile.phone = phone;
@@ -1523,7 +1542,7 @@ function syncPhoneLink(phoneFromForm){
   /* 按手机号找/建 customer（登录邮箱也参与匹配，任一对上即同一人），并写 auth_user_id 关联登录账号 */
   return ensureCustomer(myProfile.name || nm || '', phone, (authUser && authUser.email) || myProfile.email || '').then(function(c){
     if(c && c.name) myProfile.name = c.name; /* 姓名以本人顾客记录里的为准，读回显示 */
-    if(c && c.email && !myProfile.email) myProfile.email = c.email;
+    if(c && c.email && !myProfile.email && !(authUser && authUser.email)) myProfile.email = c.email; /* 邮箱只认登录账号自己的，不从认领到的记录里带别人的 */
     if(dbMode && c && c.id && authUser && !c.auth_user_id){
       dbFire(sbReq('customers?id=eq.' + c.id, { method:'PATCH', body:{ auth_user_id: authUser.id } }));
       c.auth_user_id = authUser.id;
@@ -1533,15 +1552,21 @@ function syncPhoneLink(phoneFromForm){
 function applyProfileToMine(){
   if(authProfile){
     if(authProfile.phone) myProfile.phone = authProfile.phone;
-    var nm = authProfile.display_name || authProfile.name || '';
+    /* 姓名按账号资料带出：老师账号没有另填显示名时就用老师名字（如林老师），
+       免得卡片上明明显示着老师名字，「填写资料」里的姓名却是一片空白 */
+    var nm = authProfile.display_name || authProfile.name || authProfile.teacher_name || '';
     if(nm) myProfile.name = nm;
     if(authProfile.teacher_name && currentRole()==='teacher') teacherName = authProfile.teacher_name;
   }
-  if(authUser && authUser.email && !myProfile.email) myProfile.email = authUser.email;
+  /* 邮箱只认登录账号自己的：登录后 myProfile.email 就固定成本人账号邮箱。
+     顾客记录里的邮箱可能是同手机号下别人的（共用手机号时按手机号认领到的
+     未绑定记录带的正是别人的邮箱），绝不能拿来当本人邮箱显示或带入资料表；
+     还没有本人顾客记录时，姓名和邮箱都按登录账号本身的信息带出。 */
+  if(authUser && authUser.email) myProfile.email = authUser.email;
   if(typeof myCustomer !== 'undefined' && myCustomer){
     if(myCustomer.name && !myProfile.name) myProfile.name = myCustomer.name;
     if(myCustomer.phone && !myProfile.phone) myProfile.phone = myCustomer.phone;
-    if(myCustomer.email && !myProfile.email) myProfile.email = myCustomer.email;
+    if(myCustomer.email && !myProfile.email && !(authUser && authUser.email)) myProfile.email = myCustomer.email;
   }
 }
 function routeAfterLogin(){
@@ -1631,7 +1656,55 @@ function enterTeacherIfAllowed(){
   if(!teacherName){ toast('你的老师账号还没填对应的老师名字，请店主在店主端「账号权限」里补上。'); return; }
   loadTeacherData().then(function(){ switchView('teacher'); });
 }
-/* 店主端：账号与权限列表（profiles） */
+/* 店主端：账号与权限列表（profiles）
+   顶部按身份（就是 profiles.role 本身：顾客 / 老师 / 店主）筛选；每个账号默认只显示
+   一行摘要（名字 / 手机号 + 身份徽章），点一下才展开它的身份设置，跟管理页、工作台
+   一样默认收起、要改时再展开。一次只展开一个账号。 */
+var roleFilter = 'all';   /* all | customer | teacher | admin */
+var roleOpenId = null;    /* 当前展开设置的账号 id；null = 全部收起 */
+function setRoleFilter(f){
+  roleFilter = f;
+  var box = $('rolesList');
+  if(box && box._rows) paintRoles(box); else renderRoles();
+}
+function toggleRoleRow(id){
+  roleOpenId = (roleOpenId === id) ? null : id;
+  var box = $('rolesList'); if(box) paintRoles(box);
+}
+function paintRoles(box){
+  var rows = box._rows || [];
+  var counts = { customer: 0, teacher: 0, admin: 0 };
+  rows.forEach(function(pr){ var r = pr.role || 'customer'; if(counts[r] !== undefined) counts[r]++; });
+  function chip(f, label, n){
+    var on = roleFilter === f;
+    return '<button type="button" class="ghostbtn" style="padding:7px 14px' + (on ? ';background:var(--ink);color:#f5efe0;border-color:var(--ink)' : '') + '" onclick="setRoleFilter(\'' + f + '\')">' + label + ' · ' + n + '</button>';
+  }
+  var html = '<div style="display:flex;flex-wrap:wrap;gap:8px;padding:10px 0 2px">' +
+    chip('all', '全部', rows.length) + chip('customer', '顾客', counts.customer) + chip('teacher', '老师', counts.teacher) + chip('admin', '店主', counts.admin) + '</div>';
+  var shown = 0;
+  html += rows.map(function(pr, i){
+    var role = pr.role || 'customer';
+    if(roleFilter !== 'all' && role !== roleFilter) return '';
+    shown++;
+    /* profiles 表没有邮箱列，读不到邮箱：行标题先显示姓名 / 老师名字 / 手机号，
+       都没有就显示「未填写资料」，不要把账号 UUID 直接露出来。 */
+    var nm = pr.display_name || pr.name || pr.teacher_name || '';
+    var em = esc(nm || pr.phone || '未填写资料');
+    var open = roleOpenId === pr.id;
+    var head = '<button type="button" onclick="toggleRoleRow(\'' + esc(pr.id) + '\')" aria-expanded="' + (open ? 'true' : 'false') + '" style="width:100%;display:flex;gap:8px;align-items:center;flex-wrap:wrap;text-align:left;padding:2px 0;color:var(--ink)">' +
+      '<b style="font-size:13.5px">' + em + '</b>' + (nm && pr.phone ? '<span style="font-size:12px;color:var(--ink2)">' + esc(pr.phone) + '</span>' : '') +
+      '<span class="rolebadge ' + role + '">' + roleLabel(role) + '</span>' + (authUser && pr.id===authUser.id ? '<span class="tag">就是你</span>' : '') +
+      '<span style="flex:1"></span><span style="color:var(--brass);font-weight:800">' + (open ? '▾' : '▸') + '</span></button>';
+    if(!open) return '<div style="border-top:1px dashed var(--line);padding:10px 0">' + head + '</div>';
+    return '<div style="border-top:1px dashed var(--line);padding:10px 0">' + head +
+      '<div class="field"><label>身份</label><select id="role-sel-' + i + '"><option value="customer"' + (role==='customer'?' selected':'') + '>顾客 customer</option><option value="teacher"' + (role==='teacher'?' selected':'') + '>老师 teacher</option><option value="admin"' + (role==='admin'?' selected':'') + '>店主 admin</option></select></div>' +
+      '<div class="field"><label>手机号（约课认人）</label><input id="role-phone-' + i + '" value="' + esc(pr.phone || '') + '" placeholder="例如：(206) 555-0100" /></div>' +
+      '<div class="field"><label>老师名字（身份是老师时填，要和课程上的老师名字一字不差）</label><input id="role-tn-' + i + '" value="' + esc(pr.teacher_name || '') + '" placeholder="如：林老师" /></div>' +
+      '<button class="bookbtn brassbtn" style="margin-top:10px" onclick="saveRoleRow(' + i + ',\'' + esc(pr.id) + '\')">保存身份</button></div>';
+  }).join('');
+  if(!shown) html += '<p class="note-p" style="padding:10px 0 4px">这个身份下暂时没有账号。</p>';
+  box.innerHTML = html;
+}
 function renderRoles(){
   var box = $('rolesList'); if(!box) return;
   if(!dbMode){ box.innerHTML = '<p class="note-p" style="padding:6px 0">暂时没连上数据库，账号列表读不到。连上后这里会列出 profiles 里的全部账号，店主在这里改身份。</p>'; return; }
@@ -1639,20 +1712,8 @@ function renderRoles(){
   sbReq('profiles?select=*&order=created_at.asc').then(function(rows){
     rows = rows || [];
     if(!rows.length){ box.innerHTML = '<p class="note-p" style="padding:6px 0">profiles 里还没有账号。新用户注册后会自动出现在这里（默认顾客）。第一个店主账号需要先注册，再由有权限的人把 role 改成 admin。</p>'; return; }
-    box.innerHTML = rows.map(function(pr, i){
-      /* profiles 表没有邮箱列，读不到邮箱：行标题先显示姓名 / 老师名字 / 手机号，
-         都没有就显示「未填写资料」，不要把账号 UUID 直接露出来。 */
-      var nm = pr.display_name || pr.name || pr.teacher_name || '';
-      var em = esc(nm || pr.phone || '未填写资料');
-      var role = pr.role || 'customer';
-      return '<div style="border-top:1px dashed var(--line);padding:10px 0">' +
-        '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b style="font-size:13.5px">' + em + '</b>' + (nm && pr.phone ? '<span style="font-size:12px;color:var(--ink2)">' + esc(pr.phone) + '</span>' : '') + '<span class="rolebadge ' + role + '">' + roleLabel(role) + '</span>' + (authUser && pr.id===authUser.id ? '<span class="tag">就是你</span>' : '') + '</div>' +
-        '<div class="field"><label>身份</label><select id="role-sel-' + i + '"><option value="customer"' + (role==='customer'?' selected':'') + '>顾客 customer</option><option value="teacher"' + (role==='teacher'?' selected':'') + '>老师 teacher</option><option value="admin"' + (role==='admin'?' selected':'') + '>店主 admin</option></select></div>' +
-        '<div class="field"><label>手机号（约课认人）</label><input id="role-phone-' + i + '" value="' + esc(pr.phone || '') + '" placeholder="例如：(206) 555-0100" /></div>' +
-        '<div class="field"><label>老师名字（身份是老师时填，要和课程上的老师名字一字不差）</label><input id="role-tn-' + i + '" value="' + esc(pr.teacher_name || '') + '" placeholder="如：林老师" /></div>' +
-        '<button class="bookbtn brassbtn" style="margin-top:10px" onclick="saveRoleRow(' + i + ',\'' + esc(pr.id) + '\')">保存身份</button></div>';
-    }).join('');
     box._rows = rows;
+    paintRoles(box);
   }).catch(function(){
     /* 直查 profiles 被数据库拒绝（实测 42501 permission denied：这张表还没给登录角色开放
        读取 / 写入权限，anon 和 authenticated 都一样），所以完整列表暂时列不出来。
@@ -1730,6 +1791,7 @@ function mapItemRow(row, sessRows){
 function payLabelOf(b){
   if(b.payMethod === 'balance') return '余额支付';
   if(b.payMethod === 'wechat') return '微信支付';
+  if(b.payMethod === 'store') return '到店付款';
   if(b.payMethod === 'stripe') return 'Stripe';
   return '待付款';
 }
@@ -1739,9 +1801,11 @@ function mapBookingRow(r){
   var b = { dbId: r.id, custId: r.customer_id || null, code: r.booking_code, itemId: sessInfo ? sessInfo.itemId : null, sessId: r.session_id || null,
     name: cust ? (cust.name || '') : '', phone: cust ? (cust.phone || '') : '', email: cust ? (cust.email || '') : '',
     qty: r.party_size || 1, hours: r.hours || null, total: (r.total_cents || 0)/100,
-    payMethod: r.pay_method === 'balance' ? 'balance' : r.pay_method === 'wechat' ? 'wechat' : (r.pay_method ? 'stripe' : null),
+    payMethod: r.pay_method === 'balance' ? 'balance' : r.pay_method === 'wechat' ? 'wechat' : r.pay_method === 'store' ? 'store' : (r.pay_method ? 'stripe' : null),
     payStatus: r.pay_status || 'unpaid',
-    status: r.status === 'cancelled' ? 'cancelled' : (r.pay_status === 'paid' ? 'paid' : 'hold'),
+    /* 到店付款且还没被老师 / 馆主确认收款的单是独立的「待确认」状态：占着名额，
+       但不算已付，也不是 15 分钟待付 hold；确认后 pay_status 变 paid，自然转成已确认 */
+    status: r.status === 'cancelled' ? 'cancelled' : (r.pay_status === 'paid' ? 'paid' : (r.pay_method === 'store' ? 'pending' : 'hold')),
     attendance: r.attendance || null,
     startsAt: r.starts_at ? new Date(r.starts_at) : null, isVenue: !!r.is_venue };
   b.pay = payLabelOf(b);
@@ -1884,7 +1948,9 @@ function adoptMyCustomer(c){
   myCustomer = c;
   if(c.name) myProfile.name = c.name;
   if(c.phone && !myProfile.phone) myProfile.phone = c.phone;
-  if(c.email && !myProfile.email) myProfile.email = c.email;
+  /* 邮箱不从顾客记录往 myProfile 里带（登录状态下）：这条记录可能是刚按共用手机号
+     认领到的、原本属于别人的记录，它带的邮箱是别人的；本人邮箱只认登录账号自己的。 */
+  if(c.email && !myProfile.email && !(typeof authUser !== 'undefined' && authUser && authUser.email)) myProfile.email = c.email;
   return c;
 }
 function loadMine(){
@@ -2437,6 +2503,7 @@ function pkgGroupCard(key, list){
   });
   var totalAmt = list.reduce(function(a, b){ return a + b.total; }, 0);
   var anyActive = list.some(function(b){ return b.status !== 'cancelled'; });
+  var anyPending = list.some(function(b){ return b.status === 'pending'; });
   var today = new Date(); today.setHours(0, 0, 0, 0);
   var rows = sorted.map(function(b, i){
     var s = findSess(it, b.sessId);
@@ -2446,7 +2513,7 @@ function pkgGroupCard(key, list){
       (s ? filesListHtml(s.files, '本节课件') : '');
   }).join('');
   var el = document.createElement('div'); el.className = 'mine-card';
-  el.innerHTML = '<div class="mh"><h4>' + esc(it.name) + '</h4><span class="status ' + (anyActive ? 'done' : 'cancel') + '">' + (anyActive ? '团课 · 已报名' : '已取消') + '</span></div>' +
+  el.innerHTML = '<div class="mh"><h4>' + esc(it.name) + '</h4><span class="status ' + (anyActive && !anyPending ? 'done' : anyActive ? '' : 'cancel') + '">' + (anyActive ? (anyPending ? '团课 · 待确认（到店付款）' : '团课 · 已报名') : '已取消') + '</span></div>' +
     '<div style="margin-top:6px">' + rows + '</div>' +
     filesListHtml(it.files, '课程课件 · 老师已上传') +
     '<div class="mfoot"><span class="code">团课号 ' + esc(key) + '</span><span class="amt">' + money(totalAmt) + '</span>' +
@@ -2475,7 +2542,7 @@ function infoCardEl(activeCount){
   if(acctName && acctEmail) subParts.push(acctEmail);
   if(role) subParts.push('身份 · ' + roleLabel(role));
   if(myProfile.phone) subParts.push(myProfile.phone);
-  if(myProfile.email) subParts.push(myProfile.email);
+  if(myProfile.email && myProfile.email !== acctEmail) subParts.push(myProfile.email);
   if(!subParts.length) subParts.push(hasPf ? 'ETERN.III 手碟馆' : '完善资料，预约自动带入姓名和联系方式');
   var wrap = document.createElement('div');
   var prof = document.createElement('div'); prof.className='profile';
@@ -2529,7 +2596,7 @@ function renderMy(){
     }
     var it = findItem(b.itemId); if(!it) return;
     var s = findSess(it, b.sessId);
-    var st = b.status==='paid' ? '<span class="status done">已确认</span>' : b.status==='hold' ? '<span class="status">已占位 · 待付款</span>' : '<span class="status cancel">已取消</span>';
+    var st = b.status==='paid' ? '<span class="status done">已确认</span>' : b.status==='pending' ? '<span class="status">待确认 · 到店付款</span>' : b.status==='hold' ? '<span class="status">已占位 · 待付款</span>' : '<span class="status cancel">已取消</span>';
     var row = document.createElement('div'); row.className='mine-card';
     row.innerHTML = '<div class="mh"><h4>'+esc(it.name)+'</h4>'+st+'</div>' +
       '<div class="meta mmeta"><span>'+ICONS.cal+(s? fmtDate(s.date)+' '+esc(s.time) : '')+'</span><span>'+ICONS.user+(b.hours ? '租用 '+b.hours+' 小时' : b.qty+' '+esc(it.unit))+'</span></div>' +
@@ -2600,9 +2667,12 @@ function goMy(){ switchMineTab('bookings'); goPage('mine'); }
 /* ---------------- 个人资料（手机号是认人的关键） ---------------- */
 var myProfile = { name:'', phone:'', email:'' };
 function openProfile(){
-  $('pfName').value = myProfile.name;
+  /* 带出顺序只认本人：姓名先用资料里存的，没有就按登录账号带出（老师账号带老师名字，
+     如林老师）；邮箱先用登录账号自己的，再退到资料里存的——绝不带别人的邮箱。
+     账号还没有自己的顾客记录时，就按登录账号本身的信息带出，不去取别的顾客记录。 */
+  $('pfName').value = myProfile.name || (typeof authProfile !== 'undefined' && authProfile && (authProfile.display_name || authProfile.name || authProfile.teacher_name)) || '';
   $('pfPhone').value = myProfile.phone;
-  $('pfEmail').value = myProfile.email;
+  $('pfEmail').value = (typeof authUser !== 'undefined' && authUser && authUser.email) || myProfile.email || '';
   $('profileSheet').classList.add('open');
   setTimeout(function(){ $('pfName').focus(); }, 80);
 }
@@ -2773,7 +2843,11 @@ function drawSheet(){
     ['Stripe · 信用卡','信用卡 / 借记卡','经 Stripe 安全支付'],
     ['Stripe · Apple Pay','Apple Pay','Safari 与 iPhone 上一键付'],
     ['Stripe · Google Pay','Google Pay','Chrome 与 Android 上一键付'],
-    ['余额支付','余额支付','当前余额 ' + money(balCents / 100) + (Math.round(total * 100) > balCents ? ' · 还差 ' + money(total - balCents / 100) + '，请先去「我的预约」里充值' : ' · 付款后实时从余额扣减')]
+    ['余额支付','余额支付','当前余额 ' + money(balCents / 100) + (Math.round(total * 100) > balCents ? ' · 还差 ' + money(total - balCents / 100) + '，请先去「我的预约」里充值' : ' · 付款后实时从余额扣减')],
+    /* 到店付款是已收款的 workaround：顾客已在线下付过款时选它。提交后先进「待确认」、
+       先占位，老师 / 馆主在待确认列表里核对已收款再确认（或拒绝释放名额），
+       不扣余额、不走 15 分钟待付。只是多一个付款方式，其他方式和流程不变。 */
+    ['到店付款','到店付款','仅用于已在线下收款的情况 · 待确认后生效，不扣余额']
   ];
   var curPay = bkState.pay || 'Stripe · 信用卡';
   $('sheet').innerHTML =
@@ -2794,7 +2868,9 @@ function drawSheet(){
       '<div class="slots">' + payOpts.map(function(p){
         return '<label class="slot pay'+(curPay===p[0]?' on':'')+'"><input type="radio" name="pay" value="'+p[0]+'" '+(curPay===p[0]?'checked':'')+' onchange="drawSheet()" /><span><span class="st" style="font-size:14px">'+p[1]+'</span><span class="ss">'+p[2]+'</span></span></label>';
       }).join('') + '</div>' +
-      '<p style="font-size:11px;color:var(--ink2);line-height:1.7;margin:14px 0 0">提交后先为你占位 15 分钟，付款成功才算约成功；15 分钟内没付完，名额自动释放。同一场次的名额只会被成功扣减一次，不会超卖。</p>' +
+      (curPay === '到店付款'
+        ? '<p style="font-size:11px;color:var(--ink2);line-height:1.7;margin:14px 0 0">到店付款仅用于已经在线下收过款的情况：提交后先为你占位，待老师或馆主确认已收款后才正式生效并记为已付，不扣钱包余额。</p>'
+        : '<p style="font-size:11px;color:var(--ink2);line-height:1.7;margin:14px 0 0">提交后先为你占位 15 分钟，付款成功才算约成功；15 分钟内没付完，名额自动释放。同一场次的名额只会被成功扣减一次，不会超卖。</p>') +
     '</div></div>' +
     '<div class="sheetfoot"><div class="tot"><small>合计（USD）</small><b>'+money(total)+'</b></div><button class="confirm" onclick="confirmBooking()">确认预约</button></div>';
 }
@@ -2860,17 +2936,18 @@ function confirmBooking(){
 }
 function bookLocal(it, pay, total){
   var isBalance = pay === '余额支付';
+  var isStore = pay === '到店付款';
   var code = genBookingCode();
   var b, s;
   if(it.cat === 'venue'){
     s = { id: 'v' + Date.now(), date: new Date(bkState.vDate), time: fmtMin(bkState.vStart) + '–' + fmtMin(bkState.vStart + bkState.vDur * 60), total: 1, booked: 1 };
     it.sessions.push(s);
     it.sessions.sort(function(a, b2){ return a.date - b2.date; });
-    b = { code: code, itemId: it.id, sessId: s.id, name: myProfile.name, phone: myProfile.phone, email: myProfile.email, qty: 1, total: total, pay: pay, payMethod: isBalance ? 'balance' : 'stripe', status: 'paid', hours: bkState.vDur, mine: true };
+    b = { code: code, itemId: it.id, sessId: s.id, name: myProfile.name, phone: myProfile.phone, email: myProfile.email, qty: 1, total: total, pay: pay, payMethod: isBalance ? 'balance' : isStore ? 'store' : 'stripe', status: isStore ? 'pending' : 'paid', hours: bkState.vDur, mine: true };
   } else {
     s = findSess(it, bkState.sessId);
     s.booked += bkState.qty;
-    b = { code: code, itemId: it.id, sessId: s.id, name: myProfile.name, phone: myProfile.phone, email: myProfile.email, qty: bkState.qty, total: total, pay: pay, payMethod: isBalance ? 'balance' : 'stripe', status: 'paid', mine: true };
+    b = { code: code, itemId: it.id, sessId: s.id, name: myProfile.name, phone: myProfile.phone, email: myProfile.email, qty: bkState.qty, total: total, pay: pay, payMethod: isBalance ? 'balance' : isStore ? 'store' : 'stripe', status: isStore ? 'pending' : 'paid', mine: true };
   }
   bookings.push(b);
   if(isBalance) walletAdjust(Math.round(total * 100), 'spend', null, '余额支付 · ' + it.name + ' ' + code);
@@ -2878,6 +2955,7 @@ function bookLocal(it, pay, total){
 }
 function bookViaDB(it, pay, total){
   var isBalance = pay === '余额支付';
+  var isStore = pay === '到店付款';
   var totalCents = Math.round(total * 100);
   var code = genBookingCode();
   var sessPromise;
@@ -2903,7 +2981,7 @@ function bookViaDB(it, pay, total){
     return refreshDynamic().then(function(){
       var found = null;
       for(var i = 0; i < bookings.length; i++){ if(bookings[i].code === code) found = bookings[i]; }
-      return found || { code: code, itemId: it.id, sessId: ctx.sessId, qty: it.cat === 'venue' ? 1 : bkState.qty, hours: it.cat === 'venue' ? bkState.vDur : null, total: total, pay: pay, payMethod: isBalance ? 'balance' : 'stripe', status: 'paid' };
+      return found || { code: code, itemId: it.id, sessId: ctx.sessId, qty: it.cat === 'venue' ? 1 : bkState.qty, hours: it.cat === 'venue' ? bkState.vDur : null, total: total, pay: pay, payMethod: isBalance ? 'balance' : isStore ? 'store' : 'stripe', status: isStore ? 'pending' : 'paid' };
     });
   }
   if(isBalance){
@@ -2937,17 +3015,21 @@ function bookViaDB(it, pay, total){
         throw err;
       });
   }).then(function(ctx){
-    return sbReq('bookings?booking_code=eq.' + encodeURIComponent(code), { method: 'PATCH', body: { pay_status: 'paid', pay_method: 'stripe', status: 'confirmed' } }).catch(function(){})
+    /* 到店付款不直接确认：只把付款方式标成 store，pay_status 保持未付，单子先进「待确认」
+       （占着名额），等老师 / 馆主在待确认列表里核对已收款再确认（确认时才置 paid）。 */
+    var patch = isStore ? { pay_method: 'store' } : { pay_status: 'paid', pay_method: 'stripe', status: 'confirmed' };
+    return sbReq('bookings?booking_code=eq.' + encodeURIComponent(code), { method: 'PATCH', body: patch }).catch(function(){})
       .then(function(){ return findBooked(ctx); });
   });
 }
 function bookPackageLocal(it, pay, total){
   var isBalance = pay === '余额支付';
+  var isStore = pay === '到店付款';
   var code = genBookingCode();
   var first = null;
   it.sessions.forEach(function(s, i){
     s.booked += bkState.qty;
-    var b = { code: code + '-' + (i + 1), pkg: code, itemId: it.id, sessId: s.id, name: myProfile.name, phone: myProfile.phone, email: myProfile.email, qty: bkState.qty, total: i === 0 ? total : 0, pay: pay, payMethod: isBalance ? 'balance' : 'stripe', status: 'paid', mine: true };
+    var b = { code: code + '-' + (i + 1), pkg: code, itemId: it.id, sessId: s.id, name: myProfile.name, phone: myProfile.phone, email: myProfile.email, qty: bkState.qty, total: i === 0 ? total : 0, pay: pay, payMethod: isBalance ? 'balance' : isStore ? 'store' : 'stripe', status: isStore ? 'pending' : 'paid', mine: true };
     bookings.push(b);
     if(i === 0) first = b;
   });
@@ -2956,6 +3038,7 @@ function bookPackageLocal(it, pay, total){
 }
 function bookPackageDB(it, pay, total){
   var isBalance = pay === '余额支付';
+  var isStore = pay === '到店付款';
   var totalCents = Math.round(total * 100);
   var code = genBookingCode();
   if(isBalance){
@@ -2982,13 +3065,13 @@ function bookPackageDB(it, pay, total){
   return chain.then(function(){
     var payChain = isBalance ? walletAdjust(totalCents, 'spend', null, '余额支付 · ' + it.name + ' ' + code) : Promise.resolve();
     return payChain.then(function(){
-      var patch = isBalance ? { pay_status: 'paid', pay_method: 'balance', status: 'confirmed' } : { pay_status: 'paid', pay_method: 'stripe', status: 'confirmed' };
+      var patch = isBalance ? { pay_status: 'paid', pay_method: 'balance', status: 'confirmed' } : isStore ? { pay_method: 'store' } : { pay_status: 'paid', pay_method: 'stripe', status: 'confirmed' };
       var pc = Promise.resolve();
       createdIds.forEach(function(id){ pc = pc.then(function(){ return sbReq('bookings?id=eq.' + id, { method: 'PATCH', body: patch }).catch(function(){}); }); });
       return pc;
     }).then(function(){
       // v5 建模对齐：写一条 package_enrollments 并把 enrollment id + 第几节回填到每条 booking（失败不影响报名本身，页面按预约号前缀聚合）
-      return sbReq('package_enrollments', { method: 'POST', prefer: 'return=representation', body: { package_item_id: it.id, customer_id: myCustomer.id, party_size: bkState.qty, total_cents: totalCents, status: 'confirmed', pay_status: 'paid', pay_method: isBalance ? 'balance' : 'stripe_link', enrollment_code: code, idempotency_key: uuidv4() } })
+      return sbReq('package_enrollments', { method: 'POST', prefer: 'return=representation', body: { package_item_id: it.id, customer_id: myCustomer.id, party_size: bkState.qty, total_cents: totalCents, status: isStore ? 'pending' : 'confirmed', pay_status: isStore ? 'unpaid' : 'paid', pay_method: isBalance ? 'balance' : isStore ? 'store' : 'stripe_link', enrollment_code: code, idempotency_key: uuidv4() } })
         .then(function(rows){
           var enr = rows && rows[0] ? rows[0].id : null;
           if(!enr) return;
@@ -3001,7 +3084,7 @@ function bookPackageDB(it, pay, total){
     return refreshDynamic().then(function(){
       var found = null;
       for(var i = 0; i < bookings.length; i++){ if(bookings[i].pkg === code && bookings[i].code === code + '-1') found = bookings[i]; }
-      return found || { code: code + '-1', pkg: code, itemId: it.id, sessId: it.sessions[0].id, qty: bkState.qty, total: total, pay: pay, payMethod: isBalance ? 'balance' : 'stripe', status: 'paid' };
+      return found || { code: code + '-1', pkg: code, itemId: it.id, sessId: it.sessions[0].id, qty: bkState.qty, total: total, pay: pay, payMethod: isBalance ? 'balance' : isStore ? 'store' : 'stripe', status: isStore ? 'pending' : 'paid' };
     });
   }).catch(function(err){
     var rc = Promise.resolve();
@@ -3030,10 +3113,11 @@ function afterBooked(it, b){
   if(!s) s = { date: new Date(), time: '' }; /* 预约已经建好：成功页绝不能再因为找不到场次而报错 */
   renderCards(); renderMy(); renderAdmin();
   closeSheet();
+  var storePending = b.payMethod === 'store' && b.status === 'pending';
   $('successSheet').innerHTML =
     '<div class="success-wrap"><div class="okring"><svg viewBox="0 0 24 24"><path d="M4.5 12.5 10 18 19.5 6.5"/></svg></div>' +
-    '<h2 class="serif">预约成功</h2>' +
-    '<p>'+(b.payMethod === 'balance' ? '已用钱包余额付款，余额剩 ' + money((walletState.balanceCents || 0) / 100) + '。' : '付款已确认，确认信息会发到你的手机。')+'<br />到店出示预约号即可。</p>' +
+    '<h2 class="serif">' + (storePending ? '已提交 · 待确认' : '预约成功') + '</h2>' +
+    '<p>'+(storePending ? '到店付款预约已提交，名额先为你保留。等老师或馆主确认已收款后，这单才会正式生效；确认前不用再付任何费用。' : b.payMethod === 'balance' ? '已用钱包余额付款，余额剩 ' + money((walletState.balanceCents || 0) / 100) + '。' : '付款已确认，确认信息会发到你的手机。')+'<br />到店出示预约号即可。</p>' +
     '<div class="ticket">' +
       '<div class="tr"><span>项目</span><b>'+esc(it.name)+'</b></div>' +
       '<div class="tr"><span>时间</span><b>'+fmtDate(s.date)+' '+esc(s.time)+'</b></div>' +
@@ -3087,6 +3171,85 @@ function cancelPackage(key){
     toast('团课已整套取消，' + grp.length + ' 节名额全部释放' + (wasBalance ? '，费用已退回钱包余额' : ''));
   });
 }
+
+/* ---------------- 到店付款 · 待确认 ----------------
+   选到店付款的单先进「待确认」：占着名额、不算已付。老师在工作台、馆主在店主端的
+   待确认列表里有空时再核对：确认 = 正式生效并记为已付；拒绝 = 取消并释放名额。
+   不做实时提醒，列表就在工作台 / 店主端里等着处理。团课按整套（pkg）一起确认 / 拒绝。 */
+function storePendingOf(list){
+  return (list || []).filter(function(b){ return b.payMethod === 'store' && b.status === 'pending'; });
+}
+/* 把待确认单按单 / 按团课整套分组，列表里一组只显示一行 */
+function storePendingGroups(list){
+  var seen = {}, out = [];
+  storePendingOf(list).forEach(function(b){
+    var key = b.pkg || b.code;
+    if(seen[key]){ seen[key].total += b.total; seen[key].count++; return; }
+    var g = { key: key, rep: b, total: b.total, count: 1 };
+    seen[key] = g; out.push(g);
+  });
+  return out;
+}
+/* 某个预约号对应的全部待确认副本（三个数据源里都找；团课带出整套） */
+function storeTargets(code){
+  var srcs = [bookings, allBookings, teacherBookings], first = null, i, j;
+  for(i = 0; i < srcs.length && !first; i++){ for(j = 0; j < (srcs[i] || []).length; j++){ if(srcs[i][j].code === code) first = srcs[i][j]; } }
+  if(!first) return [];
+  var out = [];
+  srcs.forEach(function(arr){
+    (arr || []).forEach(function(b){
+      if(b.status !== 'pending' || b.payMethod !== 'store') return;
+      if(first.pkg ? b.pkg === first.pkg : b.code === code) out.push(b);
+    });
+  });
+  return out;
+}
+function confirmStoreBooking(code){
+  var targets = storeTargets(code); if(!targets.length) return;
+  targets.forEach(function(b){ b.status = 'paid'; });
+  if(dbMode){
+    var ids = {};
+    targets.forEach(function(b){ if(b.dbId) ids[b.dbId] = 1; });
+    Object.keys(ids).forEach(function(id){
+      dbFire(sbReq('bookings?id=eq.' + encodeURIComponent(id), { method: 'PATCH', body: { pay_status: 'paid', pay_method: 'store', status: 'confirmed' } }));
+    });
+    var pkgKey = targets[0].pkg;
+    if(pkgKey) dbFire(sbReq('package_enrollments?enrollment_code=eq.' + encodeURIComponent(pkgKey), { method: 'PATCH', body: { pay_status: 'paid', status: 'confirmed' } }).catch(function(){}));
+  }
+  deriveHistory();
+  renderCards(); renderMy(); renderAdmin(); renderTeacher();
+  toast('已确认收款：这单正式生效，记为已付（到店付款）');
+}
+function rejectStoreBooking(code){
+  var targets = storeTargets(code); if(!targets.length) return;
+  var first = targets[0];
+  function finish(){
+    deriveHistory();
+    renderCards(); renderMy(); renderAdmin(); renderTeacher();
+    toast('已拒绝，这单的名额已释放');
+  }
+  if(dbMode && first.dbId){
+    /* 拒绝 = 走现成的 cancel_booking（释放名额同事务完成；到店付款没扣过余额，不涉及退款） */
+    toast('正在拒绝…');
+    var ids = {};
+    targets.forEach(function(b){ if(b.dbId) ids[b.dbId] = 1; });
+    var chain = Promise.resolve();
+    Object.keys(ids).forEach(function(id){ chain = chain.then(function(){ return sbRpc('cancel_booking', { p_booking_id: id }).catch(function(){}); }); });
+    var pkgKey = first.pkg;
+    if(pkgKey) chain = chain.then(function(){ return sbReq('package_enrollments?enrollment_code=eq.' + encodeURIComponent(pkgKey), { method: 'PATCH', body: { status: 'cancelled' } }).catch(function(){}); });
+    chain.then(function(){ return refreshDynamic(); }).then(finish).catch(finish);
+    return;
+  }
+  var released = {};
+  targets.forEach(function(b){
+    b.status = 'cancelled';
+    if(released[b.code]) return; /* 同一单在多个数据源里有副本，名额只释放一次 */
+    released[b.code] = 1;
+    var it = findItem(b.itemId); var s = it ? findSess(it, b.sessId) : null;
+    if(s) s.booked = Math.max(0, s.booked - (b.qty || 1));
+  });
+  finish();
+}
 </script>
 
 <script>
@@ -3112,7 +3275,7 @@ function renderAdmin(){
     var s = findSess(it, b.sessId);
     var row = document.createElement('div'); row.className='rec-row';
     row.innerHTML = '<div class="rm"><b>'+esc(b.name)+' · '+esc(it.name)+'</b><small>'+(s? fmtDate(s.date)+' '+esc(s.time) : '')+' · '+(b.hours? '租用 '+b.hours+' 小时' : b.qty+' '+esc(it.unit))+' · '+esc(b.pay)+' · '+b.code+'</small></div>' +
-      '<div class="rn"><b>'+money(b.total)+'</b>'+(b.status==='paid'?'<span class="tag">已付</span>':'<span class="tag brass">待付款</span>')+'</div>';
+      '<div class="rn"><b>'+money(b.total)+'</b>'+(b.status==='paid'?'<span class="tag">已付</span>':b.status==='pending'?'<span class="tag brass">待确认</span>':'<span class="tag brass">待付款</span>')+'</div>';
     body.appendChild(row);
   });
   var holds = active.filter(function(b){ return b.status==='hold'; });
@@ -3139,7 +3302,8 @@ function renderDash(){
       '<div class="stat"><small>今日场次</small><b>'+todays.length+' <i>场 · 已约 '+peopleToday+' 人</i></b></div>' +
       '<div class="stat"><small>待付款（占位未付）</small><b>'+(holds.length ? holds.length+' <i>单 · '+money(holdAmt)+'</i>' : '无')+'</b></div>' +
     '</div>' +
-    (holds.length ? '<div class="qa-row"><button class="ghostbtn" onclick="switchAdminTab(\'roster\')">看待付款名单</button></div>' : '');
+    (holds.length ? '<div class="qa-row"><button class="ghostbtn" onclick="switchAdminTab(\'roster\')">看待付款名单</button></div>' : '') +
+    (storePendingOf(active).length ? '<div class="qa-row"><span style="font-size:12.5px;font-weight:700">有 ' + storePendingOf(active).length + ' 单到店付款待确认</span><button class="ghostbtn" onclick="switchAdminTab(\'roster\')">去确认</button></div>' : '');
 }
 /* 统一上架入口：面板默认收起，点「＋ 上架」打开；先选类型（单节课程 / 系列团课 / 活动）再填对应表单 */
 var listPanelOpen = false;
@@ -3479,6 +3643,42 @@ function sessTimeRange(s){
   if(!m) return { sm: 600, em: 660 };
   return { sm: (+m[1]) * 60 + (+m[2]), em: (+m[3]) * 60 + (+m[4]) };
 }
+/* 编辑页日期 / 时间的显示文字按界面语言格式化（原生控件的自带显示跟系统语言走，不用它显示）：
+   中文「2026年11月29日 / 上午10:00」，英文「Nov 29, 2026 / 10:00 AM」。 */
+function fmtDatePickZh(v){
+  if(!v) return '';
+  var p = v.split('-'); if(p.length < 3) return '';
+  return (+p[0]) + '年' + (+p[1]) + '月' + (+p[2]) + '日';
+}
+function fmtDatePickEn(v){
+  if(!v) return '';
+  var p = v.split('-'); if(p.length < 3) return '';
+  var d = new Date(+p[0], +p[1] - 1, +p[2]);
+  return isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
+}
+function fmtTimePickZh(v){
+  if(!v) return '';
+  var p = v.split(':'); if(p.length < 2) return '';
+  var h = +p[0];
+  return (h < 12 ? '上午' : '下午') + (h % 12 || 12) + ':' + ('0' + (+p[1])).slice(-2);
+}
+function fmtTimePickEn(v){
+  if(!v) return '';
+  var p = v.split(':'); if(p.length < 2) return '';
+  var h = +p[0];
+  return (h % 12 || 12) + ':' + ('0' + (+p[1])).slice(-2) + ' ' + (h < 12 ? 'AM' : 'PM');
+}
+/* 把三个原生控件的当前值刷到显示框上；同时把中文原文记在 __origZh 上，
+   语言切换的恢复逻辑读它，保证切回中文时显示的还是当前值的中文格式。 */
+function syncSessDtText(){
+  var en = (typeof LANG !== 'undefined' && LANG === 'en');
+  [ ['seDate','seDateText','d'], ['seStart','seStartText','t'], ['seEnd','seEndText','t'] ].forEach(function(pr){
+    var inp = $(pr[0]), el = $(pr[1]); if(!inp || !el) return;
+    var zhTxt = pr[2] === 'd' ? fmtDatePickZh(inp.value) : fmtTimePickZh(inp.value);
+    el.textContent = en ? (pr[2] === 'd' ? fmtDatePickEn(inp.value) : fmtTimePickEn(inp.value)) : zhTxt;
+    el.__origZh = zhTxt;
+  });
+}
 function openSessEdit(itemId, sessId){
   var it = findItem(itemId); if(!it) return;
   var s = findSess(it, sessId); if(!s) return;
@@ -3490,6 +3690,7 @@ function openSessEdit(itemId, sessId){
   $('seEnd').value = fmtMin(rg.em);
   $('seFocus').value = s.focus || '';
   $('seNote').value = s.note || '';
+  syncSessDtText();
   renderSessFiles();
   $('sessSheet').classList.add('open');
 }
@@ -3907,6 +4108,22 @@ function renderRoster(){
   if(!groups.length){ box.innerHTML = '<div class="empty"><p>没有符合条件的场次。</p></div>'; return; }
   var defaultOpenId = firstBookedSessId();
   box.innerHTML = '';
+  /* 待确认 · 到店付款置顶：有空时逐单核对——确认 = 已收款、正式生效并记为已付；拒绝 = 释放名额。不用实时处理。 */
+  var pendG = storePendingGroups(bkAll());
+  if(pendG.length){
+    var pc = document.createElement('div'); pc.className = 'roster-group';
+    pc.innerHTML = '<div class="gh"><b>待确认 · 到店付款</b><span class="gs"><span>' + pendG.length + ' 单待确认 · 核对已收款就确认，没收到就拒绝</span></span></div>' +
+      pendG.map(function(g){
+        var b = g.rep; var it2 = findItem(b.itemId); var s2 = it2 ? findSess(it2, b.sessId) : null;
+        var when = s2 ? fmtDate(s2.date) + ' ' + esc(s2.time) : (b.startsAt ? fmtDate(b.startsAt) : '');
+        return '<div class="person"><span class="pa hold">' + initial(b.name) + '</span>' +
+          '<span class="pm"><b>' + esc(b.name || '学员') + '</b><small>' + esc(b.phone || '') + ' · ' + (it2 ? esc(it2.name) : '') + (g.count > 1 ? ' · 共 ' + g.count + ' 节' : ' · ' + when) + ' · 预约号 ' + esc(b.code) + '</small></span>' +
+          '<span class="pn">' + money(g.total) + '<small>到店付款</small></span>' +
+          '<button class="attbtn on-att" onclick="confirmStoreBooking(\'' + b.code + '\')">确认</button>' +
+          '<button class="attbtn" onclick="rejectStoreBooking(\'' + b.code + '\')">拒绝</button></div>';
+      }).join('');
+    box.appendChild(pc);
+  }
   groups.forEach(function(g){
     var list = sessBookings(g.it.id, g.s.id);
     var subtotal = list.reduce(function(a,b){ return a + b.total; }, 0);
@@ -3920,9 +4137,9 @@ function renderRoster(){
     var bodyHtml = '';
     if(open){
       var rows = list.length ? list.map(function(b){
-        return '<div class="person"><span class="pa'+(b.status==='hold'?' hold':'')+'">'+initial(b.name)+'</span>' +
+        return '<div class="person"><span class="pa'+(b.status==='hold'||b.status==='pending'?' hold':'')+'">'+initial(b.name)+'</span>' +
           '<span class="pm"><b>'+esc(b.name)+'</b><small>'+esc(b.phone)+' · 预约号 '+b.code+' · '+esc(b.pay)+'</small></span>' +
-          '<span class="pn">'+money(b.total)+'<small>'+(b.hours ? '租用 '+b.hours+' 小时' : b.qty+' '+esc(g.it.unit))+' · '+(b.status==='paid'?'已付':'待付款')+'</small></span></div>';
+          '<span class="pn">'+money(b.total)+'<small>'+(b.hours ? '租用 '+b.hours+' 小时' : b.qty+' '+esc(g.it.unit))+' · '+(b.status==='paid'?'已付':b.status==='pending'?'待确认':'待付款')+'</small></span></div>';
       }).join('') : '<div class="person"><span class="pm"><small>这一场还没有人预约。</small></span></div>';
       bodyHtml = rows + '<div class="gf"><span class="sum">本场小计 <b>'+money(subtotal)+'</b> · '+list.length+' 单'+(holds ? ' · 待付 '+holds+' 单' : '')+'</span>' +
         '<button class="bookbtn" onclick="exportRoster(\''+g.s.id+'\')" '+(list.length?'':'disabled class="bookbtn full"')+'>导出本场名单</button></div>';
@@ -3945,7 +4162,7 @@ function rosterRows(list){
   list.forEach(function(b){
     var it = findItem(b.itemId); if(!it) return;
     var s = findSess(it, b.sessId);
-    rows.push([b.code, it.name, typeLabel(it), s? s.date.toLocaleDateString('zh-CN') : '', s? s.time : '', b.name, b.phone, b.qty, b.total, b.pay, b.status==='paid'?'已确认':'待付款（占位未付）']);
+    rows.push([b.code, it.name, typeLabel(it), s? s.date.toLocaleDateString('zh-CN') : '', s? s.time : '', b.name, b.phone, b.qty, b.total, b.pay, b.status==='paid'?'已确认':b.status==='pending'?'待确认（到店付款）':'待付款（占位未付）']);
   });
   return rows;
 }
@@ -3976,9 +4193,57 @@ function exportAllRosters(){
 function renderOwnerWallet(){ renderOwnerTopups(); }
 /* 店主充值待确认的查找结果：ident 是输入的手机号或邮箱，via 决定充值确认通知走短信还是邮件 */
 var owPending = null;
+/* 输入像不像用户 ID：完整 UUID，或会员编号前 8 位（8 位十六进制且带字母——
+   纯数字 8 位更可能是手机号片段，不往 ID 上猜） */
+function isIdQuery(v){
+  var s = (v || '').trim().toLowerCase();
+  if(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(s)) return true;
+  return /^[0-9a-f]{8}$/.test(s) && /[a-f]/.test(s);
+}
+/* 按用户 ID 找客户：完整 UUID 精确匹配，或按会员编号前 8 位前缀匹配。
+   先查店主端已加载的客户表（custMap），不够再整表读一次；前缀对上多位时不猜，返回 multi 让店主输完整 ID。 */
+function findCustomerById(ident){
+  var q = ident.trim().toLowerCase();
+  function searchIn(rows){
+    var exact = rows.filter(function(c){ return c && c.id && String(c.id).toLowerCase() === q; });
+    if(exact.length) return { cust: exact[0] };
+    var pre = rows.filter(function(c){ return c && c.id && String(c.id).toLowerCase().indexOf(q) === 0; });
+    if(pre.length === 1) return { cust: pre[0] };
+    if(pre.length > 1) return { multi: pre.length };
+    return { cust: null };
+  }
+  var local = searchIn(Object.keys(custMap).map(function(k){ return custMap[k]; }));
+  if(local.cust || local.multi || !dbMode) return Promise.resolve(local);
+  return sbReq('customers?select=*').then(function(rows){ return searchIn(rows || []); }).catch(function(){ return local; });
+}
+/* 找到客户后的确认块（手机号 / 邮箱 / 会员编号三种查法共用）：姓名、会员编号、
+   确认用联系方式、余额、有效预约数，核对无误再充 */
+function owShowFound(c, via, ident){
+  owPending = { ident: ident, via: via, cust: c };
+  var cnt = bkAll().filter(function(b){ return b.status !== 'cancelled' && ((c.id && b.custId === c.id) || (c.phone && b.phone === c.phone)); }).length;
+  var confirmLine = via === 'email' ? '确认用邮箱：' + esc(c.email || ident) : '确认用手机号：' + esc(c.phone || ident);
+  var idLine = c.id ? ' · 会员编号 ' + esc(String(c.id).slice(0, 8)) : '';
+  $('owResult').innerHTML = '<p class="note-p" style="margin-top:12px">客户：<b style="color:var(--ink)">' + esc(c.name || '未留姓名') + '</b>' + idLine + '<br />' + confirmLine + '<br />当前钱包余额 <b style="color:var(--brass);font-size:14px">' + money((c.balance_cents || 0) / 100) + '</b> · 共 ' + cnt + ' 单有效预约</p>' + owTopupFormHtml();
+}
 function ownerFindCustomer(){
   var ident = $('owPhone').value.trim();
-  if(!ident){ toast('先输入客户手机号或邮箱'); return; }
+  if(!ident){ toast('先输入客户手机号、邮箱或会员编号'); return; }
+  if(isIdQuery(ident)){
+    /* 按用户 ID 查：查不到就是查不到，不走「直接建档」——ID 输错时不能凭空建一条新档。
+       充值的确认通知改走这位客户自己留的联系方式（邮箱优先），不往 ID 上发。 */
+    findCustomerById(ident).then(function(res){
+      if(res.multi){ owPending = null; $('owResult').innerHTML = ''; toast('这个会员编号前缀对上了 ' + res.multi + ' 位客户，请输完整的用户 ID 再查'); return; }
+      var c = res.cust;
+      if(!c){
+        owPending = null;
+        $('owResult').innerHTML = '<p class="note-p" style="margin-top:12px">没找到这个会员编号 / 用户 ID 的客户，核对一下再查。</p>';
+        return;
+      }
+      var via = c.email ? 'email' : 'phone';
+      owShowFound(c, via, c.email || c.phone || ident);
+    }).catch(function(e){ toastDbErr('查找没成功，请稍后再试', e); });
+    return;
+  }
   var via = ident.indexOf('@') > 0 ? 'email' : 'phone';
   findCustomer(via === 'phone' ? ident : '', via === 'email' ? ident : '').then(function(c){
     var box = $('owResult');
@@ -3987,11 +4252,7 @@ function ownerFindCustomer(){
       box.innerHTML = '<p class="note-p" style="margin-top:12px">没找到这个' + (via === 'email' ? '邮箱' : '手机号') + '的客户。确认无误后，可以直接给 TA 建档并充值（建档只记这个' + (via === 'email' ? '邮箱' : '手机号') + '和下面这笔充值）：</p>' + owTopupFormHtml();
       return;
     }
-    owPending = { ident: ident, via: via, cust: c };
-    var cnt = bkAll().filter(function(b){ return b.status !== 'cancelled' && ((c.id && b.custId === c.id) || (c.phone && b.phone === c.phone)); }).length;
-    var confirmLine = via === 'email' ? '确认用邮箱：' + esc(c.email || ident) : '确认用手机号：' + esc(c.phone || ident);
-    var idLine = c.id ? ' · 会员编号 ' + esc(String(c.id).slice(0, 8)) : '';
-    box.innerHTML = '<p class="note-p" style="margin-top:12px">客户：<b style="color:var(--ink)">' + esc(c.name || '未留姓名') + '</b>' + idLine + '<br />' + confirmLine + '<br />当前钱包余额 <b style="color:var(--brass);font-size:14px">' + money((c.balance_cents || 0) / 100) + '</b> · 共 ' + cnt + ' 单有效预约</p>' + owTopupFormHtml();
+    owShowFound(c, via, ident);
   }).catch(function(e){ toastDbErr('查找没成功，请稍后再试', e); });
 }
 function owTopupFormHtml(){
@@ -4098,7 +4359,7 @@ function renderRevenue(){
   stats.innerHTML =
     '<div class="stat-grid">' +
     '<div class="stat hero-stat"><div><small>总营收（USD）</small><b>'+money(paid+hold)+'</b></div><div class="hs-r">已付 '+money(paid)+'<br />待付 '+money(hold)+'</div></div>' +
-    '<div class="stat"><small>已付 · 已收款（Stripe / 余额）</small><b>'+money(paid)+'</b></div>' +
+    '<div class="stat"><small>已付 · 已收款（Stripe / 余额 / 到店）</small><b>'+money(paid)+'</b></div>' +
     '<div class="stat"><small>待付 · 占位未付款</small><b>'+money(hold)+' <i>· '+holdN+' 单</i></b></div>' +
     '</div>';
 
@@ -4166,7 +4427,8 @@ function exportRevenue(){
 /* ---------------- 老师端（独立入口，不走店主端） ---------------- */
 var teacherName = null; /* 老师名字来自登录账号的 profiles.teacher_name，不再用口令选人 */
 var teacherBookings = [];
-var teacherOpenSess = {};
+var teacherCardOpen = {}; /* 课程卡场次列表展开状态（按课程 id）：默认全部收起，卡片只显示一行摘要，点摘要行才展开场次列表；各卡独立，跟店主管理页一样 */
+var teacherOpenSess = {}; /* 场次详情展开状态（按场次 id）：默认全部收起，每节只显示一行，点一行才展开这一节的名单 / 编辑本节 / focus；各节独立 */
 function teacherNames(){
   var seen = {}, out = [];
   items.forEach(function(it){
@@ -4207,6 +4469,10 @@ function rosterFor(sessId){
   var src = dbMode ? teacherBookings : bookings;
   return src.filter(function(b){ return b.sessId === sessId && b.status !== 'cancelled'; });
 }
+function toggleTeacherCard(itemId){
+  teacherCardOpen[itemId] = !teacherCardOpen[itemId];
+  renderTeacher();
+}
 function toggleTeacherRoster(sessId){
   teacherOpenSess[sessId] = !teacherOpenSess[sessId];
   renderTeacher();
@@ -4234,30 +4500,72 @@ function renderTeacher(){
     box.innerHTML = '<div class="empty"><p>暂时没有挂在你名下的课程。店主在管理页把课程的老师设为你的名字后，这里就会出现。</p></div>';
     return;
   }
+  /* 待确认 · 到店付款：置顶一张列表卡，有空时逐单核对——确认 = 已收款、正式生效；拒绝 = 释放名额。
+     不用实时处理，就放在工作台最上面等着。 */
+  var tsrc = dbMode ? teacherBookings : bookings;
+  var pendGroups = storePendingGroups(tsrc.filter(function(b){ var pit = findItem(b.itemId); return pit && pit.teacher === teacherName; }));
+  if(pendGroups.length){
+    var pcard = document.createElement('div'); pcard.className = 'mgmt';
+    pcard.innerHTML = '<div class="mh"><div><h4>待确认 · 到店付款</h4><div class="mmeta">' + pendGroups.length + ' 单待确认 · 核对已收款就确认，没收到就拒绝</div></div></div>' +
+      pendGroups.map(function(g){
+        var b = g.rep; var it2 = findItem(b.itemId); var s2 = it2 ? findSess(it2, b.sessId) : null;
+        var when = s2 ? fmtDate(s2.date) + ' ' + esc(s2.time) : (b.startsAt ? fmtDate(b.startsAt) : '');
+        return '<div class="person" style="padding-left:0;padding-right:0"><span class="pa hold">' + initial(b.name) + '</span>' +
+          '<span class="pm"><b>' + esc(b.name || '学员') + '</b><small>' + esc(b.phone || '') + ' · ' + (it2 ? esc(it2.name) : '') + (g.count > 1 ? ' · 共 ' + g.count + ' 节' : ' · ' + when) + ' · ' + money(g.total) + '</small></span>' +
+          '<button class="attbtn on-att" onclick="confirmStoreBooking(\'' + b.code + '\')">确认</button>' +
+          '<button class="attbtn" onclick="rejectStoreBooking(\'' + b.code + '\')">拒绝</button></div>';
+      }).join('');
+    box.appendChild(pcard);
+  }
   mine.forEach(function(it){
     var card = document.createElement('div'); card.className = 'mgmt';
-    var sessHtml = it.sessions.length ? it.sessions.slice().sort(function(a, b){ return a.date - b.date; }).map(function(s){
-      var list = rosterFor(s.id);
-      var open = !!teacherOpenSess[s.id];
-      var rows = '';
-      if(open){
-        rows = '<div style="border-top:1px dashed var(--line);margin-top:9px;padding-top:4px">' +
-          (list.length ? list.map(function(b){
-            return '<div class="person" style="padding-left:0;padding-right:0"><span class="pa' + (b.status === 'hold' ? ' hold' : '') + '">' + initial(b.name) + '</span>' +
+    var sorted = it.sessions.slice().sort(function(a, b){ return a.date - b.date; });
+    var head = '<div class="mh"><div><h4>' + esc(it.name) + '</h4><div class="mmeta">' + typeLabel(it) + ' · ' + esc(it.dur) + ' · ' + it.sessions.length + ' 个场次</div></div></div>';
+    var filesLine = '<div class="sessline"><div class="r1"><b>课程课件</b><span class="cnt">' + (it.files || []).length + ' 个 · 整门课的课件在店主端管理页维护，本节课件在「编辑本节」里改</span></div></div>';
+    var body;
+    if(!sorted.length){
+      body = '<div class="sessline"><span style="font-size:12px;color:var(--ink2)">还没有场次。</span></div>' + filesLine;
+    } else {
+      /* 卡片默认只显示一行摘要（场次数 · 下一场日期时间），点摘要行才展开这门课的场次列表，
+         跟店主管理页的做法一样，方便一眼看完自己所有的课。 */
+      var today0 = new Date(); today0.setHours(0,0,0,0);
+      var nextS = null;
+      for(var ni = 0; ni < sorted.length; ni++){ if(sorted[ni].date >= today0){ nextS = sorted[ni]; break; } }
+      var listOpen = !!teacherCardOpen[it.id];
+      body = '<button type="button" class="sesssum' + (listOpen ? ' open' : '') + '" onclick="toggleTeacherCard(\'' + it.id + '\')" aria-expanded="' + (listOpen ? 'true' : 'false') + '">' +
+        '<span class="n">' + sorted.length + ' 个场次</span>' +
+        '<span class="nx">' + (nextS ? '下一场 ' + fmtDate(nextS.date) + ' ' + esc(nextS.time) : '') + '</span>' +
+        '<svg class="chev" viewBox="0 0 24 24"><path d="M5 9l7 7 7-7"/></svg></button>';
+      if(listOpen){
+        /* 场次列表里每节只占一行（日期时间 · 已约人数），点一行才展开这一节的详情：
+           本节 focus、学员名单（带出勤）、编辑本节。各节独立展开收起。 */
+        body += sorted.map(function(s){
+          var open = !!teacherOpenSess[s.id];
+          var rowHead = '<button type="button" class="sessrow-head" onclick="toggleTeacherRoster(\'' + s.id + '\')" aria-expanded="' + (open ? 'true' : 'false') + '">' +
+            '<span class="dt">' + fmtDate(s.date) + ' ' + esc(s.time) + '</span>' +
+            '<span class="cnt">已约 ' + s.booked + '/' + s.total + '</span>' +
+            '<span class="fx"></span>' +
+            '<svg class="chev" viewBox="0 0 24 24"><path d="M5 9l7 7 7-7"/></svg></button>';
+          if(!open) return '<div class="sessrow">' + rowHead + '</div>';
+          var list = rosterFor(s.id);
+          var rows = list.length ? list.map(function(b){
+            var acts = (b.payMethod === 'store' && b.status === 'pending')
+              ? '<span class="tag brass" style="flex:none">待确认</span><button class="attbtn on-att" onclick="confirmStoreBooking(\'' + b.code + '\')">确认</button><button class="attbtn" onclick="rejectStoreBooking(\'' + b.code + '\')">拒绝</button>'
+              : '<button class="attbtn' + (b.attendance === 'attended' ? ' on-att' : '') + '" onclick="setAttendance(\'' + b.code + '\',\'attended\')">已到</button>' +
+                '<button class="attbtn' + (b.attendance === 'no_show' ? ' on-no' : '') + '" onclick="setAttendance(\'' + b.code + '\',\'no_show\')">未到</button>';
+            return '<div class="person" style="padding-left:0;padding-right:0"><span class="pa' + (b.status === 'hold' || b.status === 'pending' ? ' hold' : '') + '">' + initial(b.name) + '</span>' +
               '<span class="pm"><b>' + esc(b.name || '学员') + '</b><small>' + esc(b.phone) + ' · ' + (b.hours ? '租用 ' + b.hours + ' 小时' : b.qty + ' ' + esc(it.unit)) + ' · ' + esc(b.pay) + '</small></span>' +
-              '<button class="attbtn' + (b.attendance === 'attended' ? ' on-att' : '') + '" onclick="setAttendance(\'' + b.code + '\',\'attended\')">已到</button>' +
-              '<button class="attbtn' + (b.attendance === 'no_show' ? ' on-no' : '') + '" onclick="setAttendance(\'' + b.code + '\',\'no_show\')">未到</button></div>';
-          }).join('') : '<p class="note-p" style="padding:8px 0 4px">这一节还没有学员预约。</p>') + '</div>';
+              acts + '</div>';
+          }).join('') : '<p class="note-p" style="padding:8px 0 4px">这一节还没有学员预约。</p>';
+          var panel = '<div class="sessrow-panel">' +
+            (s.focus ? '<div style="font-size:12px;color:var(--ink2);margin-bottom:2px">本节 focus：<b style="color:var(--ink)">' + esc(s.focus) + '</b></div>' : '') +
+            rows +
+            '<div class="r1" style="margin-top:8px"><button class="ghostbtn" style="padding:5px 11px;font-size:11.5px" onclick="openSessEdit(\'' + it.id + '\',\'' + s.id + '\')">编辑本节</button></div></div>';
+          return '<div class="sessrow open">' + rowHead + panel + '</div>';
+        }).join('') + filesLine;
       }
-      return '<div class="sessline"><div class="r1"><b>' + fmtDate(s.date) + ' ' + esc(s.time) + '</b><span class="cnt">已约 ' + s.booked + '/' + s.total + '</span>' +
-        '<span style="flex:1"></span>' +
-        '<button class="ghostbtn" style="padding:5px 11px;font-size:11.5px" onclick="toggleTeacherRoster(\'' + s.id + '\')">名单' + (open ? ' ▾' : ' ▸') + '</button>' +
-        '<button class="ghostbtn" style="padding:5px 11px;font-size:11.5px" onclick="openSessEdit(\'' + it.id + '\',\'' + s.id + '\')">编辑本节</button></div>' +
-        (s.focus ? '<div style="font-size:12px;color:var(--ink2);margin-top:5px">本节 focus：<b style="color:var(--ink)">' + esc(s.focus) + '</b></div>' : '') +
-        rows + '</div>';
-    }).join('') : '<div class="sessline"><span style="font-size:12px;color:var(--ink2)">还没有场次。</span></div>';
-    card.innerHTML = '<div class="mh"><div><h4>' + esc(it.name) + '</h4><div class="mmeta">' + typeLabel(it) + ' · ' + esc(it.dur) + ' · ' + it.sessions.length + ' 个场次</div></div></div>' + sessHtml +
-      '<div class="sessline"><div class="r1"><b>课程课件</b><span class="cnt">' + (it.files || []).length + ' 个 · 整门课的课件在店主端管理页维护，本节课件在「编辑本节」里改</span></div></div>';
+    }
+    card.innerHTML = head + body;
     box.appendChild(card);
   });
 }
@@ -4318,10 +4626,16 @@ function switchView(v){
     /* 每次进管理页（底部导航、隐蔽入口、重新验证后都算）都先把管理 tab 的
        分类全部收起，不记住上次展开的是哪个；页内操作在进来之后再设置状态，不受影响 */
     manageOpenCat = null; addSessForId = null; addSessPresetDate = null; cardSessOpen = {}; sessOpenIds = {}; sessDelAskId = null;
+    roleOpenId = null; roleFilter = 'all'; /* 账号权限页同样默认收起、筛选回全部 */
     renderAdmin();
     if(dbMode) loadAdminData().then(function(){ renderAdmin(); });
   }
-  if(v==='teacher') renderTeacher();
+  if(v==='teacher'){
+    /* 每次进老师工作台都先全部收起：课程卡只剩摘要行，展开过的场次详情也收起，
+       跟店主管理页的进页规则一致；页内操作在进来之后再设置状态，不受影响 */
+    teacherCardOpen = {}; teacherOpenSess = {};
+    renderTeacher();
+  }
   $('viewport').scrollTop = 0;
 }
 
@@ -4550,6 +4864,28 @@ Object.assign(EN_MAP, {
 '已到账':' received','条未读':' unread','未读':'unread',
 '先填姓名，再填手机号或邮箱，钱包按手机号或邮箱认人':'Enter your name plus a phone number or email first — the wallet is tied to your phone or email'
 });
+/* 到店付款（待确认）+ 充值按 ID 查找 + 账号权限筛选 相关文案 */
+Object.assign(EN_MAP, {
+'到店付款':'Pay at studio','待确认 · 到店付款':'Awaiting confirmation · Pay at studio','待确认':'Awaiting confirmation',
+'仅用于已在线下收款的情况 · 待确认后生效，不扣余额':'Only for payments already collected offline · Takes effect after confirmation, no balance charged',
+'到店付款仅用于已经在线下收过款的情况：提交后先为你占位，待老师或馆主确认已收款后才正式生效并记为已付，不扣钱包余额。':'Pay at studio is only for payments already collected offline: your spot is held first, and the booking takes effect and counts as paid once the teacher or owner confirms receipt. No wallet balance is charged.',
+'已提交 · 待确认':'Submitted · Awaiting confirmation',
+'到店付款预约已提交，名额先为你保留。等老师或馆主确认已收款后，这单才会正式生效；确认前不用再付任何费用。':'Your pay-at-studio booking is submitted and your spot is held. It takes effect once the teacher or owner confirms the payment — nothing more to pay before then.',
+'已确认收款：这单正式生效，记为已付（到店付款）':'Payment confirmed — this booking is now in effect and marked paid (pay at studio)',
+'已拒绝，这单的名额已释放':'Declined — the spot has been released','正在拒绝…':'Declining…',
+'团课 · 待确认（到店付款）':'Package · Awaiting confirmation (pay at studio)',
+'核对已收款就确认，没收到就拒绝':'Confirm once you have verified the payment; decline if it was not received',
+'单待确认 · 核对已收款就确认，没收到就拒绝':' awaiting confirmation · Confirm once you have verified the payment; decline if it was not received',
+'单待确认 · ':' awaiting confirmation · ',
+'客户手机号、邮箱或会员编号':'Customer phone, email or member ID','输入手机号、邮箱或会员编号（ID 前 8 位）查找':'Enter a phone, email or member ID (first 8 characters of the ID) to search',
+'先输入客户手机号、邮箱或会员编号':'Enter the customer’s phone, email or member ID first',
+'没找到这个会员编号 / 用户 ID 的客户，核对一下再查。':'No customer found with this member ID / user ID — please double-check and try again.',
+'这个会员编号前缀对上了 ':'This member ID prefix matches ',' 位客户，请输完整的用户 ID 再查':' customers — enter the full user ID to search',
+'客人线下把钱给你（比如现金或转账收到 $200）之后，在这里按手机号、邮箱或会员编号（用户 ID 前 8 位）找到 TA、输金额充值，钱立刻进 TA 的钱包余额，TA 在自己那边马上能看到。每一笔代充都会写进流水：谁充的、给谁充、多少钱、什么时候、怎么收的钱。':'When a guest pays you offline, find them by phone number, email or member ID (first 8 characters of the user ID) and enter the amount. Their balance updates instantly, and every top-up is logged: who, whom, how much, when, and how it was paid.',
+'已付 · 已收款（Stripe / 余额 / 到店）':'Paid · Collected (Stripe / balance / at studio)',
+'只统计未取消的预约。已付 = 已通过 Stripe、钱包余额或到店付款（线下已收、经老师 / 馆主确认）收款；待付 = 已占位还没付款的单，占位 15 分钟未付会自动释放名额，不用追着收钱。到店付款未确认前先计在待付里，确认后转入已付。':'Confirmed bookings only. Paid means Stripe, wallet balance, or pay at studio (collected offline and confirmed by the teacher / owner); unpaid holds are released after 15 minutes. Pay-at-studio bookings count as unpaid until confirmed, then move to paid.',
+'这个身份下暂时没有账号。':'No accounts with this role yet.','有 ':'There are ',' 单到店付款待确认':' pay-at-studio bookings awaiting confirmation','去确认':'Review'
+});
 var EN_KEYS = Object.keys(EN_MAP).sort(function(a,b){ return b.length - a.length; });
 var EN_PATTERNS = [
   [/(\d+)\s*周后课表/g, 'Schedule · in $1 weeks'],
@@ -4692,6 +5028,7 @@ function rerenderAll(){
   try{ if(typeof renderTeacher === 'function' && typeof teacherName !== 'undefined' && teacherName) renderTeacher(); }catch(e){}
   try{ if(typeof weekOpen !== 'undefined' && weekOpen && typeof renderWeek === 'function') renderWeek(); }catch(e){}
   try{ if(typeof bkState !== 'undefined' && bkState && document.getElementById('sheet') && document.getElementById('sheet').classList.contains('open') && typeof drawSheet === 'function') drawSheet(); }catch(e){}
+  try{ if(typeof syncSessDtText === 'function' && document.getElementById('sessSheet') && document.getElementById('sessSheet').classList.contains('open')) syncSessDtText(); }catch(e){}
   try{ if(typeof applyRoute === 'function') applyRoute(); }catch(e){}
 }
 function setLang(l){
