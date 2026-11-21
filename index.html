@@ -1468,7 +1468,11 @@ function sbAuthReq(path, opts){
 }
 /* 头像首字：优先用已保存的名字——老师用老师名字（如「林老师」→「林」），
    其次账号显示名，再次本人顾客记录里的姓名（myProfile.name）；
-   都没有才用邮箱首字母大写（如 admin@… →「A」）。中英文界面都一样。 */
+   名字都确认没有了才用邮箱首字母大写（如 admin@… →「A」）。中英文界面都一样。
+   资料还没加载完（登录恢复时 authProfile 还是空的）绝不先拿邮箱首字母顶上：
+   否则头像会先闪一下邮箱首字母（老师邮箱的「T」）、资料到了再跳成姓名首字（「林」）。
+   资料没到就先显示中性占位「·」；fetchMyProfile 完成和 adoptMyCustomer 读回姓名后
+   都会再调 updateAuthBtn，届时自然换成正确的首字。 */
 function userInitial(){
   var nm = '';
   if(authProfile){
@@ -1478,6 +1482,7 @@ function userInitial(){
   if(!nm && typeof myProfile !== 'undefined' && myProfile && myProfile.name) nm = myProfile.name;
   nm = String(nm || '').replace(/^\s+|\s+$/g, '');
   if(nm) return nm.charAt(0).toUpperCase();
+  if(!authProfile) return '·'; /* 资料未到：中性占位，不露邮箱首字母 */
   var em = (authUser && authUser.email) || '';
   if(em) return em.charAt(0).toUpperCase();
   return '·';
@@ -2113,8 +2118,15 @@ function ensureCustomer(name, phone, email){
     }
     var newBody = { phone: phone || null, email: email || null, name: name || null };
     if(typeof authUser !== 'undefined' && authUser) newBody.auth_user_id = authUser.id;
-    return sbReq('customers', { method: 'POST', body: newBody, prefer: 'return=representation' }).then(function(created){
-      adoptMyCustomer(created[0]);
+    /* 建档 POST 必须用 return=minimal：return=representation 会变成 INSERT ... RETURNING，
+       返回新行时还要过 customers 的读权限（customer_visible_to_me），刚建好的行那一刻
+       通不过、整单报 42501——老师 / 店主 / 新顾客第一次约课（单节、团课、场地）全卡在这里，
+       而 INSERT 本身是能成功的。建完不要求返回新行，改按登录账号绑定用 findMyCustomer
+       把刚建的行读回来再认成本人；没登录时退回按手机号 / 邮箱读回。 */
+    return sbReq('customers', { method: 'POST', body: newBody, prefer: 'return=minimal' }).then(function(){
+      return (typeof authUser !== 'undefined' && authUser) ? findMyCustomer() : findCustomer(phone, email);
+    }).then(function(mine){
+      if(mine) adoptMyCustomer(mine);
       return refreshWallet().then(function(){ return myCustomer; });
     });
   };
@@ -4463,7 +4475,11 @@ function ownerDoTopup(){
         return { id: null, phone: lw.phone, email: lw.email, name: nm, balance_cents: lw.balanceCents };
       }
       var body = { phone: via === 'phone' ? ident : null, email: via === 'email' ? ident : null, name: nm || null };
-      return sbReq('customers', { method: 'POST', body: body, prefer: 'return=representation' }).then(function(rows){ return rows[0]; });
+      /* 同 ensureCustomer：建档用 return=minimal，不要求返回新行（return=representation
+         会被 customers 的读权限拦下报 42501）；建完按刚建档用的手机号 / 邮箱把新行读回来。 */
+      return sbReq('customers', { method: 'POST', body: body, prefer: 'return=minimal' }).then(function(){
+        return findCustomer(via === 'phone' ? ident : '', via === 'email' ? ident : '');
+      });
     });
   startCust.then(function(c){
     return walletCreditTopup(c, amtCents, 'owner', method, '店主代充 · ' + methodLabel + '收款').then(function(){ return c; });
