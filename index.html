@@ -739,7 +739,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
   .week-toggle{ padding:9px 12px; }
   #catalog .pagehead{ padding-top:12px; }
   #catalog .pagehead h2{ font-size:18px; }
-  #catalog .pagehead p{ font-size:11px; line-height:1.55; display:-webkit-box; -webkit-line-clamp:1; -webkit-box-orient:vertical; overflow:hidden; }
+  #catalog .pagehead p{ font-size:11px; line-height:1.55; }
   #catalog .chips{ padding-top:8px; padding-bottom:8px; }
 
   /* 横向紧凑卡：一屏多门 */
@@ -836,7 +836,7 @@ input[type="date"],input[type="time"]{ max-width:100%; min-width:0; }
         <section id="catalog">
           <div class="pagehead" style="padding-top:20px">
             <h2>预约目录</h2>
-            <p>价格均为美金（USD），在线支付或钱包余额均可。下单先占位 15 分钟，付款成功才算约好。</p>
+            <p>价格以美元计。未付款的预约保留 15 分钟，预约以确认邮件为准。课程时间按设备时区显示。</p>
           </div>
           <div class="chips" role="tablist" aria-label="分类">
             <button class="on" data-cat="all" onclick="setCat('all',this)">全部</button>
@@ -894,7 +894,7 @@ input[type="date"],input[type="time"]{ max-width:100%; min-width:0; }
             <button class="on" data-atab="cal" onclick="switchAdminTab('cal')">日历</button>
             <button data-atab="roster" onclick="switchAdminTab('roster')">预约名单<span id="holdBadge" class="tab-badge hidden">0</span></button>
             <button data-atab="rev" onclick="switchAdminTab('rev')">营收</button>
-            <button data-atab="manage" onclick="switchAdminTab('manage')">管理</button>
+            <button data-atab="manage" onclick="switchAdminTab('manage')">项目与场次</button>
             <button data-atab="wallet" onclick="switchAdminTab('wallet')">客户充值</button>
             <button data-atab="roles" onclick="switchAdminTab('roles')">账号权限</button>
           </div>
@@ -982,7 +982,7 @@ input[type="date"],input[type="time"]{ max-width:100%; min-width:0; }
                   <select id="niCat"><option value="handpan">手碟课</option><option value="yoga">瑜伽课</option><option value="pilates">普拉提课</option><option value="venue">空间</option></select></div>
                 <div class="field"><label for="niPrice">价格（USD $）</label><input id="niPrice" type="number" min="0" step="0.01" required placeholder="45" /></div>
                 <div class="field"><label for="niDur">时长</label><input id="niDur" required placeholder="如：60 分钟 / 每小时" /></div>
-                <div class="field"><label for="niTeacher">老师 / 说明</label><input id="niTeacher" placeholder="如：林老师 · 含乐器" /></div>
+                <div class="field"><label for="niTeacher">老师</label><select id="niTeacher"><option value="">暂不指定老师</option></select></div>
                 <div class="field"><label for="niDesc">简介</label><textarea id="niDesc" placeholder="一句话介绍这个项目"></textarea></div>
                 <button class="submit" type="submit">上架</button>
               </form>
@@ -994,7 +994,7 @@ input[type="date"],input[type="time"]{ max-width:100%; min-width:0; }
                 <div class="field"><label for="npKind">所属类型（决定归到哪个分类）</label>
                   <select id="npKind"><option value="handpan">手碟</option><option value="yoga">瑜伽</option><option value="pilates">普拉提</option></select></div>
                 <div class="field"><label for="npPrice">整套价格（USD $）</label><input id="npPrice" type="number" min="0" step="0.01" required placeholder="380" /></div>
-                <div class="field"><label for="npTeacher">老师</label><input id="npTeacher" placeholder="如：林老师" /></div>
+                <div class="field"><label for="npTeacher">老师</label><select id="npTeacher"><option value="">暂不指定老师</option></select></div>
                 <div class="field"><label for="npDur">每节时长</label>
                   <select id="npDur" onchange="pkgPatternChanged()"><option value="60">60 分钟</option><option value="75">75 分钟</option><option value="90">90 分钟</option><option value="120">2 小时</option></select></div>
                 <div class="field"><label for="npSeats">每节名额</label><input id="npSeats" type="number" min="1" max="200" value="12" required /></div>
@@ -1035,6 +1035,16 @@ input[type="date"],input[type="time"]{ max-width:100%; min-width:0; }
         <div id="atab-roles" class="hidden">
           <div class="pagehead" style="padding-top:14px">
             <p>新用户注册后默认是顾客。只有店主能在这里把账号改成老师或店主：选身份、填老师对应的名字（老师登录后按这个名字只看自己教的课）、填手机号（约课按手机号认人，登录账号靠它关联自己的预约）。普通用户改不了自己的身份。</p>
+          </div>
+          <div class="whitebox">
+            <h4>邀请老师</h4>
+            <form onsubmit="sendTeacherInvite(event)">
+              <div class="field"><label for="inviteName">老师姓名</label><input id="inviteName" maxlength="80" required /></div>
+              <div class="field"><label for="inviteEmail">老师邮箱</label><input id="inviteEmail" type="email" maxlength="254" required /></div>
+              <div class="field"><label for="invitePhone">手机号（选填）</label><input id="invitePhone" type="tel" maxlength="40" /></div>
+              <button type="submit" class="wide-btn">发送邀请邮件</button>
+              <p id="inviteStatus" class="note-p" role="status"></p>
+            </form>
           </div>
           <div class="whitebox"><h4>全部账号 · 身份设置</h4><div id="rolesList"><p class="note-p" style="padding:6px 0">正在读取账号列表…</p></div></div>
           <div class="sec"><p class="note-p">说明：网页版用邮箱 + 密码登录（Supabase Auth）。手机号短信验证码登录以后接短信服务商再加；小程序用微信登录认 openid，身份同样在这张 profiles 表里。</p></div>
@@ -1094,24 +1104,36 @@ input[type="date"],input[type="time"]{ max-width:100%; min-width:0; }
         <div class="backrow"><button class="backbtn" onclick="closeAuth()" aria-label="返回"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button></div>
         <div class="dbody" style="padding-top:62px">
           <h2 class="serif" style="margin-top:0" id="authTitle">登录</h2>
-          <p class="ddesc">用邮箱 + 密码登录。预约目录不用登录就能看；「我的」、店主端和老师工作台要登录后按身份才能进。注册后默认是顾客，老师 / 店主身份由店主在店主端改。</p>
+          <p class="ddesc">使用邮箱和密码登录。</p>
           <div class="authseg" role="tablist" aria-label="登录或注册" style="margin:14px 0 4px">
             <button id="authTabLogin" class="on" onclick="setAuthMode('login')">登录</button>
             <button id="authTabReg" onclick="setAuthMode('register')">注册</button>
           </div>
           <div class="field"><label for="authEmail">邮箱</label><input id="authEmail" type="email" placeholder="you@example.com" autocomplete="email" /></div>
           <div class="field"><label for="authPassword">密码</label><input id="authPassword" type="password" placeholder="至少 6 位" autocomplete="current-password" onkeydown="if(event.key==='Enter')submitAuth()" /></div>
-          <div class="field"><label for="authPhone">手机号（约课认人用，第一次填一次）</label><input id="authPhone" type="tel" placeholder="例如：(206) 555-0100" autocomplete="tel" /><p class="note-p" style="margin-top:6px">手机号还是约课的身份 key：填了它，登录账号就会和按这个手机号下的预约、钱包关联起来。</p></div>
+          <div class="field"><label for="authPhone">预约使用的手机号</label><input id="authPhone" type="tel" placeholder="例如：(206) 555-0100" autocomplete="tel" /><p class="note-p" style="margin-top:6px">首次登录时填写预约使用的手机号，以关联已有预约和余额。</p></div>
           <p id="authErr" style="color:var(--red);font-weight:700;min-height:22px;margin:10px 0 0"></p>
           <p id="authOk" style="color:var(--sage);font-weight:700;margin:4px 0 0"></p>
           <button class="wide-btn" id="authSubmit" style="margin-top:12px;background:var(--brass)" onclick="submitAuth()">登录</button>
           <button class="ghost-btn" onclick="closeAuth()">先逛逛目录</button>
-          <p class="note-p" style="margin-top:10px">手机号短信验证码登录以后再加（需要接短信服务商）；现在网页版先用邮箱 + 密码。</p>
         </div>
       </div>
     </div>
 
     <!-- 店主端已锁定：重新验证 sheet（输当前店主账号密码，后端验过才重新解锁） -->
+    <div class="sheet" id="teacherInviteSheet" role="dialog" aria-modal="true" aria-labelledby="teacherInviteTitle">
+      <div class="scroll"><div class="dbody">
+        <h2 id="teacherInviteTitle">设置老师账号密码</h2>
+        <p id="teacherInviteIntro">请设置至少 10 个字符的密码。完成后，用你的邮箱和新密码登录老师工作台。</p>
+        <form onsubmit="acceptTeacherInvite(event)">
+          <div class="field" id="teacherInvitePasswordField"><label for="teacherInvitePassword">新密码</label><input id="teacherInvitePassword" type="password" minlength="10" maxlength="72" autocomplete="new-password" required /></div>
+          <div class="field" id="teacherInviteRepeatField"><label for="teacherInviteRepeat">确认新密码</label><input id="teacherInviteRepeat" type="password" minlength="10" maxlength="72" autocomplete="new-password" required /></div>
+          <button id="teacherInviteSubmit" type="submit" class="wide-btn" disabled>设置密码并启用账号</button>
+          <button type="button" class="ghost-btn" onclick="closeTeacherInvite()">取消</button>
+          <p id="teacherInviteStatus" class="note-p" role="status"></p>
+        </form>
+      </div></div>
+    </div>
     <div class="sheet" id="reauthSheet" role="dialog" aria-modal="true">
       <div class="scroll">
         <div class="backrow"><button class="backbtn" onclick="closeReauth()" aria-label="返回"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button></div>
@@ -1159,7 +1181,7 @@ input[type="date"],input[type="time"]{ max-width:100%; min-width:0; }
           <div class="opt-label">本节课件</div>
           <div id="seFiles"></div>
           <label class="ghostbtn" style="display:inline-block;margin-top:4px;cursor:pointer">＋ 上传新课件<input type="file" hidden accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.md,.jpg,.jpeg,.png,.webp,.gif" onchange="uploadSessFile(this)" /></label>
-          <button class="wide-btn" style="margin-top:22px;background:var(--brass)" onclick="saveSessEdit()">保存这一节</button>
+          <button id="seSave" class="wide-btn" style="margin-top:22px;background:var(--brass)" onclick="saveSessEdit()">保存这一节</button>
           <button class="ghost-btn" onclick="closeSessEdit()">取消</button>
         </div>
       </div>
@@ -1370,6 +1392,113 @@ function sbReqRaw(path, opts){
       });
     });
 }
+var teacherInviteToken = '';
+var teacherInviteExisting = false;
+var teacherInviteReady = false;
+function teacherInviteRequest(body, token){
+  return fetch(SB_URL + '/functions/v1/teacher-invite', {
+    method: 'POST', headers: { apikey: SB_KEY, Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  }).then(async function(response){
+    var result = await response.json().catch(function(){ return {}; });
+    if(!response.ok) throw new Error(result.code || 'invite_unavailable');
+    return result;
+  });
+}
+function inviteErrorMessage(error){
+  var messages = {
+    account_exists: '该邮箱已有账号，请先核对身份，再在账号权限中设置老师角色。',
+    invite_not_pending: '邀请无效、已过期或已使用，请联系馆主。',
+    invalid_teacher: '请检查老师姓名和邮箱。',
+    password_update_failed: '密码未能保存，请换一个密码再试。',
+    invalid_password: '密码需至少 10 个字符，且不超过 72 字节。'
+  };
+  return messages[error.message] || '暂时无法完成，请稍后重试。';
+}
+async function sendTeacherInvite(event){
+  event.preventDefault();
+  if(currentRole() !== 'admin' || !adminUnlocked) return;
+  var form = event.currentTarget;
+  var button = form.querySelector('button');
+  button.disabled = true;
+  var status = $('inviteStatus');
+  status.textContent = '正在发送邀请…';
+  try {
+    await ensureFreshToken();
+    if(currentRole() !== 'admin' || !adminUnlocked) return;
+    await teacherInviteRequest({ action:'invite', name:$('inviteName').value, email:$('inviteEmail').value, phone:$('invitePhone').value, language:LANG }, authToken);
+    form.reset();
+    status.textContent = '邀请邮件已发出。老师打开邮件完成确认后可以登录。';
+  } catch(error){ status.textContent = inviteErrorMessage(error); }
+  finally { button.disabled = false; }
+}
+async function readTeacherInvite(){
+  var url = new URL(location.href);
+  if(url.searchParams.get('teacher-invite') !== '1') return;
+  var hash = new URLSearchParams(url.hash.slice(1));
+  teacherInviteToken = ['invite','magiclink'].includes(hash.get('type')) ? hash.get('access_token') || '' : '';
+  url.searchParams.delete('teacher-invite');
+  url.hash = '';
+  history.replaceState(null, '', url.pathname + url.search);
+  if(!teacherInviteToken){ toast('邀请无效、已过期或已使用，请联系馆主。'); return; }
+  var token = teacherInviteToken;
+  var status = $('teacherInviteStatus');
+  var button = $('teacherInviteSubmit');
+  teacherInviteReady = false;
+  button.disabled = true;
+  status.textContent = '正在验证邀请…';
+  $('teacherInviteSheet').classList.add('open');
+  try {
+    var result = await teacherInviteRequest({ action:'inspect' }, token);
+    if(teacherInviteToken !== token) return;
+    if(!['link_existing','set_password'].includes(result.code)) throw new Error('invite_not_pending');
+    teacherInviteExisting = result.code === 'link_existing';
+    ['teacherInvitePassword','teacherInviteRepeat'].forEach(function(id){
+      $(id).required = !teacherInviteExisting;
+      $(id).disabled = teacherInviteExisting;
+      $(id + 'Field').classList.toggle('hidden', teacherInviteExisting);
+    });
+    $('teacherInviteTitle').textContent = teacherInviteExisting ? '启用老师工作台' : '设置老师账号密码';
+    $('teacherInviteIntro').textContent = teacherInviteExisting ? '确认后为你现有的账号增加老师权限，保留原来的密码、钱包和预约。' : '请设置至少 10 个字符的密码。完成后，用你的邮箱和新密码登录老师工作台。';
+    button.textContent = teacherInviteExisting ? '确认启用老师工作台' : '设置密码并启用账号';
+    status.textContent = '';
+    teacherInviteReady = true;
+    button.disabled = false;
+    if(!teacherInviteExisting) $('teacherInvitePassword').focus();
+    else button.focus();
+  } catch(error){
+    if(teacherInviteToken === token) status.textContent = inviteErrorMessage(error);
+  }
+}
+function closeTeacherInvite(){
+  teacherInviteToken = '';
+  teacherInviteReady = false;
+  $('teacherInviteSheet').querySelector('form').reset();
+  $('teacherInviteSheet').classList.remove('open');
+  toast('已取消启用。如需继续，请联系馆主重新发送邀请。');
+}
+async function acceptTeacherInvite(event){
+  event.preventDefault();
+  if(!teacherInviteToken || !teacherInviteReady) return;
+  var password = $('teacherInvitePassword').value;
+  var status = $('teacherInviteStatus');
+  if(!teacherInviteExisting && password !== $('teacherInviteRepeat').value){ status.textContent = '两次输入的密码不一致。'; return; }
+  var form = event.currentTarget;
+  var button = form.querySelector('button');
+  button.disabled = true;
+  try{
+    var existing = teacherInviteExisting;
+    await teacherInviteRequest(existing ? { action:'accept' } : { action:'accept', password:password }, teacherInviteToken);
+    teacherInviteToken = '';
+    form.reset();
+    $('teacherInviteSheet').classList.remove('open');
+    if(authUser) doLogout();
+    openAuth('teacher');
+    teacherInviteReady = false;
+    toast(existing ? '老师工作台已启用，请用原账号登录。' : '老师账号已启用，请用新密码登录。');
+  }catch(error){ status.textContent = inviteErrorMessage(error); }
+  finally { button.disabled = false; }
+}
 function sbRpc(name, args){ return sbReq('rpc/' + name, { method: 'POST', body: args }); }
 /* ---------------- 登录与身份（Supabase Auth · 邮箱+密码；profiles 表定身份） ----------------
    身份只认 profiles.role：customer / teacher / admin。注册默认 customer（库里触发器建行）。
@@ -1415,12 +1544,14 @@ function applySessionData(data, fallbackEmail){
 }
 function refreshSession(){
   if(!authRefresh) return Promise.reject(new Error('没有可用的 refresh_token'));
-  return sbAuthReq('token?grant_type=refresh_token', { body: { refresh_token: authRefresh } }).then(function(data){
+  var token = authRefresh;
+  return sbAuthReq('token?grant_type=refresh_token', { body: { refresh_token: token } }).then(function(data){
+    if(authRefresh !== token) return;
     if(!data || !data.access_token) throw new Error('续期没返回新令牌');
     applySessionData(data);
     return data;
   }).catch(function(e){
-    if(e && e.status){ /* 服务器明确拒绝：refresh_token 已失效，清掉登录态回到未登录 */
+    if(authRefresh === token && e && (e.status === 400 || e.status === 401 || e.status === 403)){ /* 认证失效才清除会话，服务暂不可用时保留 */
       authUser = null; authToken = null; authRefresh = null; authExpiresAt = 0; authProfile = null; adminUnlocked = false;
       clearPersistedSession();
       updateAuthBtn();
@@ -1448,7 +1579,7 @@ function restoreSession(){
   authToken = s.access_token; authRefresh = s.refresh_token || null; authExpiresAt = s.expires_at || 0;
   authUser = { id: s.user.id, email: s.user.email || '' };
   var needRefresh = !!authRefresh && (!authExpiresAt || Date.now() > authExpiresAt - 30000);
-  var p = needRefresh ? refreshSession().catch(function(){}) : Promise.resolve();
+  var p = needRefresh ? ensureFreshToken().catch(function(){}) : Promise.resolve();
   p.then(function(){
     if(!authUser) return;
     return fetchMyProfile().then(function(){
@@ -1627,6 +1758,13 @@ function routeAfterLogin(){
   var intent = authIntent; authIntent = null;
   adminLocked = false; /* 刚输密码登录成功本身就是一次身份验证，清掉锁定标记 */
   updateAuthBtn(); applyProfileToMine();
+  if(intent === 'booking' && bkState){
+    bkState.name = myProfile.name || '';
+    bkState.phone = myProfile.phone || '';
+    drawSheet();
+    $('sheet').classList.add('open');
+    return;
+  }
   if(intent === 'admin'){ enterAdminIfAllowed(); return; }
   if(intent === 'teacher'){ enterTeacherIfAllowed(); return; }
   if(intent === 'mine'){ goPage('mine'); if(dbMode) refreshDynamic().then(function(){ renderMy(); }); return; }
@@ -1839,7 +1977,7 @@ function mapItemRow(row, sessRows){
     teacher: row.teacher || '—', img: imgForRow({ title: cleanName, type: row.type }), desc: row.description || seedDescFor(cleanName), on: row.is_active !== false, sessions: [], files: [] };
   (sessRows || []).filter(function(s){ return s.item_id === row.id; })
     .sort(function(a, b){ return new Date(a.starts_at) - new Date(b.starts_at); })
-    .forEach(function(s){ it.sessions.push({ id: s.id, date: new Date(s.starts_at), time: timeRange(s.starts_at, mins, s.ends_at), total: s.capacity, booked: Math.max(0, s.capacity - s.remaining), focus: s.focus || '', note: s.note || s.content || '', files: [] }); });
+    .forEach(function(s){ it.sessions.push({ id: s.id, date: new Date(s.starts_at), endsAt: new Date(s.ends_at || (Date.parse(s.starts_at) + mins * 60000)), time: timeRange(s.starts_at, mins, s.ends_at), total: s.capacity, booked: Math.max(0, s.capacity - s.remaining), focus: s.focus || '', note: s.note || s.content || '', files: [] }); });
   return it;
 }
 function payLabelOf(b){
@@ -1950,6 +2088,9 @@ function deriveHistory(){
 var CATALOG_CACHE_KEY = 'etern-catalog-v1';
 var CATALOG_CACHE_TTL = 5 * 60 * 1000;
 var paintedCatalogRaw = null; /* 本次首屏若用缓存画过，记下当时用的原始行，供后台刷新后比对 */
+var catalogRefreshAt = 0;
+var catalogRevision = 0;
+var foregroundCatalogRead = null;
 var freshCatalogRaw = null;   /* 最近一次从库里拉到的目录原始行 */
 function readCatalogCache(){
   try{
@@ -1964,19 +2105,23 @@ function readCatalogCache(){
 function writeCatalogCache(res){
   try{ localStorage.setItem(CATALOG_CACHE_KEY, JSON.stringify({ t: Date.now(), items: res[0] || [], sessions: res[1] || [], mats: res[2] || [] })); }catch(e){}
 }
-function dropCatalogCache(){ try{ localStorage.removeItem(CATALOG_CACHE_KEY); }catch(e){} }
+function dropCatalogCache(){ catalogRevision++; try{ localStorage.removeItem(CATALOG_CACHE_KEY); }catch(e){} }
 function catalogRawEqual(a, b){
   if(!a || !b) return false;
   try{ return JSON.stringify([a.items, a.sessions, a.mats || []]) === JSON.stringify([b.items, b.sessions, b.mats || []]); }catch(e){ return false; }
 }
-function fetchCatalog(){
+function fetchCatalog(background){
   return Promise.all([
     sbReq('items?select=*&order=created_at.asc'),
     sbReq('sessions?select=*'),
     sbReq('course_materials?select=*').catch(function(){ return []; })
   ]).then(function(res){
-    freshCatalogRaw = { items: res[0] || [], sessions: res[1] || [], mats: res[2] || [] };
-    writeCatalogCache(res);
+    if(!background){
+      catalogRevision++;
+      freshCatalogRaw = { items: res[0] || [], sessions: res[1] || [], mats: res[2] || [] };
+      catalogRefreshAt = Date.now();
+      writeCatalogCache(res);
+    }
     return res;
   });
 }
@@ -2012,15 +2157,18 @@ function loadMine(){
      定本人只走 findMyCustomer（按 auth_user_id），不按手机号 / 邮箱匹配 */
   if(!dbMode) return Promise.resolve();
   if(!authUser){ bookings = []; myNotifications = []; return Promise.resolve(); }
+  var user = authUser;
   return findMyCustomer().then(function(c){
+    if(authUser !== user) return;
     if(!c){ bookings = []; myNotifications = []; deriveHistory(); return; }
-    adoptMyCustomer(c);
-    custMap = {}; custMap[c.id] = c;
-    return sbReq('bookings?select=*&customer_id=eq.' + c.id + '&order=created_at.desc').then(function(rows){
+    if(!adoptMyCustomer(c)) return;
+    custMap[c.id] = c;
+    var bookingRead = sbReq('bookings?select=*&customer_id=eq.' + c.id + '&order=created_at.desc').then(function(rows){
+      if(authUser !== user || !myCustomer || myCustomer.id !== c.id) return;
       bookings = (rows || []).map(mapBookingRow);
       deriveHistory();
-      return refreshWallet();
-    }).then(function(){ return loadMyNotifications(); });
+    });
+    return Promise.all([bookingRead, refreshWallet(c), loadMyNotifications()]);
   }).catch(function(){});
 }
 function loadAdminData(){
@@ -2138,7 +2286,7 @@ function ensureCustomer(name, phone, email){
   }
   return findCustomer(phone, email).then(claimOrCreate);
 }
-function refreshWallet(){
+function refreshWallet(knownCustomer){
   if(!dbMode){
     if(!myProfile.phone && !myProfile.email) return Promise.resolve();
     var f1 = lwFind(myProfile.phone, myProfile.email);
@@ -2151,15 +2299,18 @@ function refreshWallet(){
   /* 钱包只认本人记录：已认定的本人记录按它自己的 id 读最新余额，还没认定就按
      登录账号绑定找。绝不按手机号 / 邮箱重新匹配——共用手机号 / 邮箱时会把
      别人的钱包认成自己的（店主代充后走的也是这里，更不能串到被充客户身上）。 */
-  var startW = (myCustomer && myCustomer.id && !(myCustomer.auth_user_id && authUser && myCustomer.auth_user_id !== authUser.id))
+  var user = authUser;
+  var startW = knownCustomer ? Promise.resolve(knownCustomer) : (myCustomer && myCustomer.id && !(myCustomer.auth_user_id && authUser && myCustomer.auth_user_id !== authUser.id))
     ? sbReq('customers?select=*&id=eq.' + encodeURIComponent(myCustomer.id)).then(function(rows){ return (rows && rows.length) ? rows[0] : myCustomer; }).catch(function(){ return myCustomer; })
     : findMyCustomer();
   return startW.then(function(c){
+    if(authUser !== user) return;
     if(c && adoptMyCustomer(c)) walletState.balanceCents = c.balance_cents || 0;
     if(!myCustomer){ walletState = { balanceCents: 0, txns: [] }; return; }
-    return sbReq('wallet_transactions?select=*&customer_id=eq.' + myCustomer.id + '&order=created_at.desc&limit=50')
-      .then(function(txns){ walletState.txns = txns || []; })
-      .catch(function(){ walletState.txns = []; });
+    var id = myCustomer.id;
+    return sbReq('wallet_transactions?select=*&customer_id=eq.' + id + '&order=created_at.desc&limit=50')
+      .then(function(txns){ if(authUser === user && myCustomer && myCustomer.id === id) walletState.txns = txns || []; })
+      .catch(function(){ if(authUser === user && myCustomer && myCustomer.id === id) walletState.txns = []; });
   }).catch(function(){});
 }
 function walletCreditTopup(customer, amountCents, source, method, note){
@@ -2224,14 +2375,16 @@ function loadMyNotifications(){
      customers.id，再按这个 id 查通知。绝不按手机号 / 邮箱定人——共用或相同的
      手机号 / 邮箱会串到别人的通知（店主看到顾客充值通知就是这条路径出的事）。 */
   if(!authUser){ myNotifications = []; return Promise.resolve(); }
+  var user = authUser;
   var ownCust = (myCustomer && myCustomer.id && !(myCustomer.auth_user_id && myCustomer.auth_user_id !== authUser.id))
     ? Promise.resolve(myCustomer)
     : findMyCustomer().then(function(c){ return c ? adoptMyCustomer(c) : null; });
   return ownCust.then(function(c){
+    if(authUser !== user) return;
     if(!c || !c.id){ myNotifications = []; return; }
     return sbReq('notifications?select=*&customer_id=eq.' + c.id + '&channel=eq.inapp&order=created_at.desc&limit=20')
-      .then(function(rows){ myNotifications = rows || []; })
-      .catch(function(){ myNotifications = []; });
+      .then(function(rows){ if(authUser === user && myCustomer && myCustomer.id === c.id) myNotifications = rows || []; })
+      .catch(function(){ if(authUser === user && myCustomer && myCustomer.id === c.id) myNotifications = []; });
   });
 }
 function markNotifRead(id){
@@ -2311,6 +2464,26 @@ function initApp(){
     renderCards(); renderMy(); renderAdmin();
   });
 }
+
+function refreshVisibleCatalog(){
+  if(document.hidden || !dbMode || foregroundCatalogRead || Date.now() - catalogRefreshAt < 30000) return;
+  if($('customerView').classList.contains('hidden') || custPage !== 'book' || document.querySelector('.sheet.open')) return;
+  var previous = freshCatalogRaw || paintedCatalogRaw;
+  var revision = catalogRevision;
+  foregroundCatalogRead = fetchCatalog(true).then(function(res){
+    if(revision !== catalogRevision || document.hidden || $('customerView').classList.contains('hidden') ||
+       custPage !== 'book' || document.querySelector('.sheet.open')) return;
+    catalogRevision++;
+    freshCatalogRaw = { items: res[0] || [], sessions: res[1] || [], mats: res[2] || [] };
+    catalogRefreshAt = Date.now();
+    writeCatalogCache(res);
+    if(catalogRawEqual(previous, freshCatalogRaw)) return;
+    buildCatalog(res[0], res[1], res[2]);
+    renderCards();
+  }).catch(function(){}).finally(function(){ foregroundCatalogRead = null; });
+}
+document.addEventListener('visibilitychange', refreshVisibleCatalog);
+setInterval(refreshVisibleCatalog, 30000);
 
 /* ---------------- 工具 ---------------- */
 function $(id){ return document.getElementById(id); }
@@ -2760,10 +2933,9 @@ function saveProfile(){
 
 function openBooking(itemId, sessId){
   var it = findItem(itemId); if(!it) return;
-  if(!isLoggedIn()){ openAuth(null); toast('约课前先登录一下，登录完留在目录，重新点「预约」就行'); return; }
   bkState = { itemId:itemId, sessId:null, qty:1, name:myProfile.name || '', phone:myProfile.phone || '' };
   if(it.cat==='venue'){
-    bkState.vDate = dstr(1);
+    bkState.vDate = venueDay(1);
     bkState.vDur = 2;
     bkState.vStart = firstFreeStart(it, bkState.vDate, bkState.vDur);
   } else if(it.cat==='package'){
@@ -2799,14 +2971,40 @@ function parseRange(t){
 function fmtMin(min){ var h = Math.floor(min/60), mm = min%60; return (h<10?'0':'')+h+':'+(mm<10?'0':'')+mm; }
 function isoDate(d){ return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
 function dkey(d){ return d.getFullYear()+'-'+d.getMonth()+'-'+d.getDate(); }
+var venueClock = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'America/Los_Angeles', year: 'numeric', month: 'numeric', day: 'numeric',
+  hour: 'numeric', minute: 'numeric', hourCycle: 'h23'
+});
+function venueParts(instant){
+  var fields = {};
+  venueClock.formatToParts(instant).forEach(function(part){ fields[part.type] = Number(part.value); });
+  return fields;
+}
+function venueDay(offset){
+  var p = venueParts(new Date());
+  return new Date(p.year, p.month - 1, p.day + offset, 12);
+}
+function venueInstant(date, minutes){
+  var wall = Date.UTC(date.getFullYear(), date.getMonth(), date.getDate(), 0, minutes);
+  var p = venueParts(new Date(wall));
+  return new Date(2 * wall - Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute));
+}
 function busyIntervals(date, venueItem){
   var out = [];
+  var opening = venueInstant(date, OPEN_MIN);
   items.forEach(function(it){
     it.sessions.forEach(function(s){
-      if(dkey(s.date)!==dkey(date)) return;
       if(it.cat==='venue' && (it.id!==venueItem.id || s.booked<=0)) return;
-      var r = parseRange(s.time); if(!r) return;
-      out.push({ start:r[0], end:r[1], name: it.name });
+      var range = parseRange(s.time); if(!range) return;
+      if(!s.endsAt){
+        if(dkey(s.date)===dkey(date)) out.push({start:range[0], end:range[1], name:it.name});
+        return;
+      }
+      var start = OPEN_MIN + (s.date - opening)/60000;
+      var end = OPEN_MIN + (s.endsAt - opening)/60000;
+      if(start < CLOSE_MIN && end > OPEN_MIN){
+        out.push({start:Math.max(start, OPEN_MIN), end:Math.min(end, CLOSE_MIN), name:it.name});
+      }
     });
   });
   out.sort(function(a,b){ return a.start-b.start; });
@@ -2826,7 +3024,7 @@ function firstFreeStart(it, date, durH){
 function venuePickerHtml(it){
   var dateOpts = '';
   for(var i=0;i<30;i++){
-    var d = dstr(i);
+    var d = venueDay(i);
     dateOpts += '<option value="'+isoDate(d)+'" '+(dkey(d)===dkey(bkState.vDate)?'selected':'')+'>'+fmtDate(d)+'</option>';
   }
   var busy = busyIntervals(bkState.vDate, it);
@@ -2871,6 +3069,7 @@ function drawSheet(){
   var payEl = document.querySelector('input[name="pay"]:checked');
   if(payEl) bkState.pay = payEl.value;
   var isVenue = it.cat==='venue';
+  var signedIn = isLoggedIn();
   var isPkg = it.cat==='package';
   var sessHtml, total, maxQ = 1;
   if(isPkg){
@@ -2920,8 +3119,9 @@ function drawSheet(){
       '<div class="meta" style="margin-bottom:10px"><span>'+ICONS.clock+esc(it.dur)+'</span><span>'+ICONS.user+esc(it.teacher)+'</span></div>' +
       '<p class="ddesc">'+esc(it.desc)+'</p>' +
       '<div class="opt-label">'+(isVenue ? '选择日期与时段' : isPkg ? '整套课程安排（固定时间）' : '选择场次')+'</div>' +
+      '<p class="note-p">'+(isVenue ? '场馆时段按 Bellevue 时间（PT）显示。' : '课程时间按设备时区显示。')+'</p>' +
       sessHtml +
-      (isVenue ? '' : '<div class="steprow"><span class="sl">'+(isPkg ? '份数' : '人数 / 数量')+'<small>'+(isPkg ? '每份含全部 '+it.sessions.length+' 节 · 最多 '+maxQ+' 份' : '本场最多可约 '+maxQ+' 个')+'</small></span><span class="stepper"><button type="button" onclick="chQty(-1)" aria-label="减少">−</button><b>'+bkState.qty+' '+esc(it.unit)+'</b><button type="button" onclick="chQty(1)" aria-label="增加">＋</button></span></div>') +
+      (signedIn ? (isVenue ? '' : '<div class="steprow"><span class="sl">'+(isPkg ? '份数' : '人数 / 数量')+'<small>'+(isPkg ? '每份含全部 '+it.sessions.length+' 节 · 最多 '+maxQ+' 份' : '本场最多可约 '+maxQ+' 个')+'</small></span><span class="stepper"><button type="button" onclick="chQty(-1)" aria-label="减少">−</button><b>'+bkState.qty+' '+esc(it.unit)+'</b><button type="button" onclick="chQty(1)" aria-label="增加">＋</button></span></div>') +
       '<div class="opt-label">联系人信息</div>' +
       '<div class="field"><label for="bkName">姓名</label><input id="bkName" placeholder="例如：Ada" autocomplete="name" value="'+esc(bkState.name||'')+'" /></div>' +
       '<div class="field"><label for="bkPhone">手机号（用于接收预约通知）</label><input id="bkPhone" type="tel" placeholder="例如：(206) 555-0100" autocomplete="tel" value="'+esc(bkState.phone||'')+'" /></div>' +
@@ -2931,9 +3131,9 @@ function drawSheet(){
       }).join('') + '</div>' +
       (curPay === '到店付款'
         ? '<p style="font-size:11px;color:var(--ink2);line-height:1.7;margin:14px 0 0">到店付款仅用于已经在线下收过款的情况：提交后先为你占位，待老师或馆主确认已收款后才正式生效并记为已付，不扣钱包余额。</p>'
-        : '<p style="font-size:11px;color:var(--ink2);line-height:1.7;margin:14px 0 0">提交后先为你占位 15 分钟，付款成功才算约成功；15 分钟内没付完，名额自动释放。同一场次的名额只会被成功扣减一次，不会超卖。</p>') +
+        : '<p style="font-size:11px;color:var(--ink2);line-height:1.7;margin:14px 0 0">未付款的预约保留 15 分钟，预约以确认邮件为准。</p>') : '') +
     '</div></div>' +
-    '<div class="sheetfoot"><div class="tot"><small>合计（USD）</small><b>'+money(total)+'</b></div><button class="confirm" onclick="confirmBooking()">确认预约</button></div>';
+    '<div class="sheetfoot"><div class="tot"><small>合计（USD）</small><b>'+money(total)+'</b></div><button class="confirm" onclick="confirmBooking()">'+(signedIn ? '确认预约' : '登录后继续')+'</button></div>';
 }
 function pickSess(sid){ bkState.sessId = sid; bkState.qty = 1; drawSheet(); }
 function chQty(d){
@@ -2949,6 +3149,7 @@ function chQty(d){
   drawSheet();
 }
 function confirmBooking(){
+  if(!isLoggedIn()){ closeSheet(); openAuth('booking'); return; }
   var it = findItem(bkState.itemId);
   var name = $('bkName').value.trim();
   var phone = $('bkPhone').value.trim();
@@ -3024,8 +3225,7 @@ function bookViaDB(it, pay, total){
     /* 余额路径由 book_venue_with_balance 自己建场次，这里不预建，避免多出一个孤儿场次 */
     sessPromise = Promise.resolve({ sessId: null, venueSession: true });
   } else if(it.cat === 'venue'){
-    var start = new Date(bkState.vDate);
-    start.setHours(Math.floor(bkState.vStart / 60), bkState.vStart % 60, 0, 0);
+    var start = venueInstant(bkState.vDate, bkState.vStart);
     /* 顾客没有 sessions 表写权限：一次性场次改由数据库函数 create_venue_session 建（服务端校验时段占用） */
     sessPromise = sbRpc('create_venue_session', { p_item_id: it.id, p_starts_at: start.toISOString(), p_ends_at: new Date(start.getTime() + (bkState.vDur || 1)*3600000).toISOString() })
       .then(function(res){
@@ -3048,8 +3248,7 @@ function bookViaDB(it, pay, total){
   if(isBalance){
     if(it.cat === 'venue'){
       /* 场馆余额支付走原子函数 book_venue_with_balance：建一次性场次 + 占位 + 扣余额 + 写流水 + 建已确认已付预约一次完成 */
-      var vStart = new Date(bkState.vDate);
-      vStart.setHours(Math.floor(bkState.vStart / 60), bkState.vStart % 60, 0, 0);
+      var vStart = venueInstant(bkState.vDate, bkState.vStart);
       return sbRpc('book_venue_with_balance', { p_item_id: it.id, p_customer_id: myCustomer.id, p_starts_at: vStart.toISOString(), p_ends_at: new Date(vStart.getTime() + (bkState.vDur || 1)*3600000).toISOString(), p_total_cents: totalCents, p_booking_code: code, p_idempotency_key: uuidv4(), p_note: '余额支付 · ' + it.name + ' ' + code, p_source: 'web' })
         .then(function(res){
           var row = res && res[0] ? res[0] : res;
@@ -3490,12 +3689,15 @@ function renderDash(){
   var active = activeBookings();
   var holds = active.filter(function(b){ return b.status==='hold'; });
   var holdAmt = holds.reduce(function(a,b){ return a + b.total; }, 0);
-  var mRev = 0;
-  active.forEach(function(b){ var s = sessOf(b); if(s && s.date.getFullYear()===now.getFullYear() && s.date.getMonth()===now.getMonth()) mRev += b.total; });
+  var paidThisMonth = active.filter(function(b){
+    var s = sessOf(b);
+    return b.status === 'paid' && s && s.date.getFullYear() === now.getFullYear() && s.date.getMonth() === now.getMonth();
+  });
+  var mRev = paidThisMonth.reduce(function(total, b){ return total + b.total; }, 0);
   $('dashCard').innerHTML =
     (adminDataErr ? '<div class="dbbanner" style="margin-top:14px">预约名单和营收数据暂时读不到：数据库读取 bookings / customers 时被拒绝。课程、场次、日历和改价都正常；名单与营收等数据库恢复读取后会重新显示，不是没有预约。</div>' : '') +
     '<div class="stat-grid">' +
-      '<div class="stat hero-stat"><div><small>本月营收（USD）</small><b>'+money(mRev)+'</b></div><div class="hs-r">已付 + 待付合计<br />共 '+active.length+' 单有效预约</div></div>' +
+      '<div class="stat hero-stat"><div><small>本月场次已付（USD）</small><b>'+money(mRev)+'</b></div><div class="hs-r">共 '+paidThisMonth.length+' 单已付预约</div></div>' +
       '<div class="stat"><small>今日场次</small><b>'+todays.length+' <i>场 · 已约 '+peopleToday+' 人</i></b></div>' +
       '<div class="stat"><small>待付款（占位未付）</small><b>'+(holds.length ? holds.length+' <i>单 · '+money(holdAmt)+'</i>' : '无')+'</b></div>' +
     '</div>' +
@@ -3505,9 +3707,30 @@ function renderDash(){
 /* 统一上架入口：面板默认收起，点「＋ 上架」打开；先选类型（单节课程 / 系列团课 / 活动）再填对应表单 */
 var listPanelOpen = false;
 var listType = 'course';
+function loadListingTeachers(){
+  if(!dbMode || !authUser || currentRole() !== 'admin') return;
+  var user = authUser;
+  var selects = [$('niTeacher'), $('npTeacher')];
+  selects.forEach(function(select){ select.disabled = true; });
+  return sbReq('profiles?select=teacher_name&role=eq.teacher&order=teacher_name.asc').then(function(rows){
+    if(authUser !== user) return;
+    var names = Array.from(new Set((rows || []).map(function(row){ return (row.teacher_name || '').trim(); }).filter(Boolean)));
+    selects.forEach(function(select){
+      var selected = select.value;
+      select.replaceChildren(new Option('暂不指定老师', ''));
+      names.forEach(function(name){ select.add(new Option(name, name)); });
+      if(names.includes(selected)) select.value = selected;
+    });
+  }).catch(function(){
+    if(authUser === user && listPanelOpen) toast('老师名单读取失败，请重新打开上架表单重试。');
+  }).finally(function(){
+    if(authUser === user) selects.forEach(function(select){ select.disabled = false; });
+  });
+}
 function toggleListPanel(){
   listPanelOpen = !listPanelOpen;
   var p = $('listPanel'); if(p) p.classList.toggle('hidden', !listPanelOpen);
+  if(listPanelOpen) loadListingTeachers();
 }
 function setListType(t){
   listType = t;
@@ -3952,28 +4175,45 @@ function removeSessFile(idx){
   renderSessFiles();
   toast('课件已从这一节删除');
 }
-function saveSessEdit(){
+async function saveSessEdit(){
+  var button = $('seSave');
+  if(button.disabled) return;
+  var ctx = sessEditCtx;
   var s = sessEditSess(); if(!s){ closeSessEdit(); return; }
-  var it = sessEditCtx ? findItem(sessEditCtx.itemId) : null;
+  var it = findItem(ctx.itemId);
   var dv = $('seDate').value;
   var sm = hmToMin($('seStart').value), em = hmToMin($('seEnd').value);
   if(!dv){ toast('请选这一节的日期'); return; }
   if(sm === null || em === null || em <= sm){ toast('时间不对：结束时间要晚于开始时间'); return; }
   var dp = dv.split('-');
-  s.date = new Date(+dp[0], +dp[1] - 1, +dp[2]);
-  s.time = fmtMin(sm) + '–' + fmtMin(em);
-  if(it) it.sessions.sort(function(a, b){ return a.date - b.date; });
-  s.focus = $('seFocus').value.trim();
-  s.note = $('seNote').value.trim();
-  if(dbMode){
-    var st = new Date(s.date); st.setHours(Math.floor(sm / 60), sm % 60, 0, 0);
-    dbFire(sbReq('sessions?id=eq.' + encodeURIComponent(s.id), { method: 'PATCH', body: { starts_at: st.toISOString(), ends_at: new Date(st.getTime() + (em - sm) * 60000).toISOString(), focus: s.focus, content: s.note } })
-      .catch(function(){ return sbReq('sessions?id=eq.' + encodeURIComponent(s.id), { method: 'PATCH', body: { focus: s.focus } }); }));
+  var start = new Date(+dp[0], +dp[1] - 1, +dp[2], Math.floor(sm / 60), sm % 60);
+  var finish = new Date(+dp[0], +dp[1] - 1, +dp[2], Math.floor(em / 60), em % 60);
+  var focus = $('seFocus').value.trim();
+  var note = $('seNote').value.trim();
+  button.disabled = true;
+  try {
+    if(dbMode){
+      var rows = await sbReq('sessions?id=eq.' + encodeURIComponent(s.id) + '&select=id', {
+        method: 'PATCH', prefer: 'return=representation',
+        body: { starts_at: start.toISOString(), ends_at: finish.toISOString(), focus: focus, content: note }
+      });
+      if(!Array.isArray(rows) || rows.length !== 1) throw new Error('Session update did not return the saved row');
+    }
+  } catch(e){
+    toast('保存失败，请重试。');
+    return;
+  } finally {
+    button.disabled = false;
   }
-  closeSessEdit();
+  s.date = start;
+  s.time = fmtMin(sm) + '–' + fmtMin(em);
+  s.focus = focus;
+  s.note = note;
+  if(it) it.sessions.sort(function(a, b){ return a.date - b.date; });
+  if(sessEditCtx === ctx) closeSessEdit();
   renderCards(); renderAdmin(); renderMy();
   if(typeof teacherName !== 'undefined' && teacherName) renderTeacher();
-  toast('这一节已更新：日期时间、内容和课件都已保存，学员看到的就是新的');
+  toast('本节场次已保存。');
 }
 
 /* ---------------- 上架团课 ----------------
@@ -4175,9 +4415,14 @@ function switchAdminTab(name){
 /* ---------------- 日历占用 ---------------- */
 var calCursor = new Date(); calCursor.setDate(1); calCursor.setHours(0,0,0,0);
 var calSelKey = dkey(new Date());
+function isCancelledVenueSession(it, s){
+  if(it.cat !== 'venue' || adminDataErr) return false;
+  var history = bkAll().filter(function(b){ return b.sessId === s.id; });
+  return history.length > 0 && history.every(function(b){ return b.status === 'cancelled'; });
+}
 function sessionsOn(d){
   var out = [];
-  items.forEach(function(it){ it.sessions.forEach(function(s){ if(dkey(s.date)===dkey(d)) out.push({it:it, s:s}); }); });
+  items.forEach(function(it){ it.sessions.forEach(function(s){ if(dkey(s.date)===dkey(d) && !isCancelledVenueSession(it, s)) out.push({it:it, s:s}); }); });
   out.sort(function(a,b){ return a.s.time < b.s.time ? -1 : 1; });
   return out;
 }
@@ -4253,7 +4498,7 @@ function renderUpcoming(){
   items.forEach(function(it){ it.sessions.forEach(function(s){
     var d = new Date(s.date); d.setHours(0,0,0,0);
     var diff = Math.round((d - now)/86400000);
-    if(diff>=0 && diff<7) list.push({it:it, s:s});
+    if(diff>=0 && diff<7 && !isCancelledVenueSession(it, s)) list.push({it:it, s:s});
   }); });
   list.sort(function(a,b){ return a.s.date - b.s.date || (a.s.time < b.s.time ? -1 : 1); });
   if(!list.length){ box.innerHTML = '<p class="note-p" style="padding:6px 0 8px">未来 7 天没有场次，去「管理」tab 新增一场吧。</p>'; return; }
@@ -4912,6 +5157,7 @@ function lockAdmin(){
 function tick(){ var d = new Date(); var el = $('clock'); if(el) el.textContent = d.getHours() + ':' + String(d.getMinutes()).padStart(2,'0'); }
 tick(); setInterval(tick, 20000);
 
+readTeacherInvite();
 restoreSession();
 updateAuthBtn();
 applyRoute();
@@ -4937,6 +5183,21 @@ var MONTHS_EN = ['January','February','March','April','May','June','July','Augus
 var MON_EN = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 var WD_EN = {'一':'Mon','二':'Tue','三':'Wed','四':'Thu','五':'Fri','六':'Sat','日':'Sun'};
 var EN_EXACT = {
+'已取消启用。如需继续，请联系馆主重新发送邀请。':'Activation cancelled. Ask the studio owner to resend the invitation when you are ready.',
+'正在验证邀请…':'Verifying invitation…','启用老师工作台':'Activate Teacher Studio','确认启用老师工作台':'Activate Teacher Studio','确认后为你现有的账号增加老师权限，保留原来的密码、钱包和预约。':'Add teacher access to your existing account. Your password, wallet and bookings will stay the same.','老师工作台已启用，请用原账号登录。':'Teacher Studio is active. Sign in with your existing account.','密码需至少 10 个字符，且不超过 72 字节。':'Use at least 10 characters and no more than 72 bytes.',
+'邀请老师':'Invite a teacher','老师姓名':'Teacher name','老师邮箱':'Teacher email','手机号（选填）':'Phone (optional)','发送邀请邮件':'Send invitation','正在发送邀请…':'Sending invitation…','邀请邮件已发出。老师打开邮件完成确认后可以登录。':'Invitation sent. Open the email to complete activation.',
+'设置老师账号密码':'Set your teacher password','请设置至少 10 个字符的密码。完成后，用你的邮箱和新密码登录老师工作台。':'Use at least 10 characters. Then sign in to the Teacher Studio with your email and new password.','新密码':'New password','确认新密码':'Confirm new password','设置密码并启用账号':'Set password and activate account','两次输入的密码不一致。':'Passwords do not match.','老师账号已启用，请用新密码登录。':'Your teacher account is active. Sign in with your new password.',
+'该邮箱已有账号，请先核对身份，再在账号权限中设置老师角色。':'This email has an account. Verify the teacher’s identity, then assign their role in Accounts.','邀请无效、已过期或已使用，请联系馆主。':'This invitation is invalid, expired or already used. Contact the studio owner.','请检查老师姓名和邮箱。':'Check the teacher name and email.','密码未能保存，请换一个密码再试。':'The password could not be saved. Try a different password.','暂时无法完成，请稍后重试。':'Could not complete the request. Try again shortly.',
+'暂不指定老师':'Leave teacher unassigned','老师名单读取失败，请重新打开上架表单重试。':'Could not load teachers. Reopen the listing form to try again.',
+'价格以美元计。未付款的预约保留 15 分钟，预约以确认邮件为准。课程时间按设备时区显示。':'Prices are in USD. Unpaid reservations are held for 15 minutes. Your booking is confirmed by email. Class times use your device time zone.',
+'课程时间按设备时区显示。':'Class times use your device time zone.',
+'场馆时段按 Bellevue 时间（PT）显示。':'Studio rental times are shown in Bellevue time (PT).',
+'未付款的预约保留 15 分钟，预约以确认邮件为准。':'Unpaid reservations are held for 15 minutes. Please check your confirmation email.',
+'使用邮箱和密码登录。':'Log in with your email and password.',
+'预约使用的手机号':'Booking phone number',
+'首次登录时填写预约使用的手机号，以关联已有预约和余额。':'On your first login, use the phone number from your bookings to link your reservations and balance.',
+'登录后继续':'Log in to continue',
+'保存失败，请重试。':'Could not save. Please try again.','本节场次已保存。':'Session saved.',
 '手碟馆预约 · 网页版 — ETERN.III':'ETERN.III Handpan Studio · Book Online',
 '预约目录 · ETERN.III 手碟馆':'Booking · ETERN.III Handpan Studio',
 '我的 · ETERN.III 手碟馆':'My Page · ETERN.III Handpan Studio',
@@ -5001,7 +5262,7 @@ var EN_MAP = {
 /* 场次编辑 sheet */
 '编辑这一节课':'Edit This Lesson','本节 focus（这节课的重点）':'This lesson\u2019s focus','如：双手配合与律动':'e.g. Two-hand coordination & groove','本节介绍（要讲什么）':'About this lesson (what it covers)','这节课会讲什么、练什么，报了这节课的学员会看到':'What this lesson will teach and practise — students booked into it will see this','本节课件':'This lesson\u2019s materials','＋ 上传新课件':'+ Upload new material','保存这一节':'Save this lesson','课件已挂到这一节，学员那边就能看到':'Material attached to this lesson — students can see it now','课件已替换成新文件':'Material replaced with the new file','课件已从这一节删除':'Material removed from this lesson','这一节的内容已更新，学员看到的就是新内容和新课件':'This lesson has been updated — students now see the new content and materials','这一节还没有课件。上传后，报了这节课的学员能在自己的预约和上课记录里打开。':'This lesson has no materials yet. After uploading, students booked into it can open them from their bookings and class history.','替换':'Replace','删除':'Delete',
 /* 店主端通用 */
-'店主工作台':'Owner Dashboard','先看今天，再处理名单、营收和上架。':'Today at a glance, then rosters, revenue, and listings.','今天是':'Today is ','。先看今天，再处理名单、营收和上架。':'. Start with today, then handle rosters, revenue and listings.','日历':'Calendar','预约名单':'Rosters','营收':'Revenue','管理':'Manage','客户充值':'Top-ups','账号权限':'Accounts','店主端功能':'Owner dashboard sections','本月营收（USD）':'Revenue this month (USD)','已付 + 待付合计':'Paid + unpaid combined','共':'','单有效预约':' active bookings','今日场次':'Today\u2019s sessions','场 · 已约':' sessions · ','人':' people','待付款（占位未付）':'Awaiting payment (held, unpaid)','单 ·':' bookings · ','无':'None','＋ 新增场次':'+ Add session','＋ 上架新项目':'+ List new item','看待付款名单':'View unpaid rosters','预约名单和营收数据暂时读不到：数据库读取 bookings / customers 时被拒绝。课程、场次、日历和改价都正常；名单与营收等数据库恢复读取后会重新显示，不是没有预约。':'Rosters and revenue can\u2019t be read right now: the database refused the bookings / customers read. Courses, sessions, the calendar and repricing all work; rosters and revenue will reappear once database reads recover — it does not mean there are no bookings.',
+'店主工作台':'Owner Dashboard','先看今天，再处理名单、营收和上架。':'Today at a glance, then rosters, revenue, and listings.','今天是':'Today is ','。先看今天，再处理名单、营收和上架。':'. Start with today, then handle rosters, revenue and listings.','日历':'Calendar','预约名单':'Rosters','营收':'Revenue','管理':'Manage','客户充值':'Top-ups','账号权限':'Accounts','店主端功能':'Owner dashboard sections','项目与场次':'Listings & Sessions','本月场次已付（USD）':'Paid for this month’s sessions (USD)','单已付预约':' paid bookings','场次列表与课件':'Sessions & materials','暂无近期场次。':'No upcoming sessions.','共':'','单有效预约':' active bookings','今日场次':'Today\u2019s sessions','场 · 已约':' sessions · ','人':' people','待付款（占位未付）':'Awaiting payment (held, unpaid)','单 ·':' bookings · ','无':'None','＋ 新增场次':'+ Add session','＋ 上架新项目':'+ List new item','看待付款名单':'View unpaid rosters','预约名单和营收数据暂时读不到：数据库读取 bookings / customers 时被拒绝。课程、场次、日历和改价都正常；名单与营收等数据库恢复读取后会重新显示，不是没有预约。':'Rosters and revenue can\u2019t be read right now: the database refused the bookings / customers read. Courses, sessions, the calendar and repricing all work; rosters and revenue will reappear once database reads recover — it does not mean there are no bookings.',
 /* 日历 */
 '本月':'This month','上月':'← Prev','下月 →':'Next →','今天':'Today','有空位':'Spots open','已满':'Full','点任意一天看当天安排':'Tap any day to see its schedule','近期场次 · 未来 7 天':'Coming up · Next 7 days','未来 7 天没有场次，去「管理」tab 新增一场吧。':'No sessions in the next 7 days — add one in the Manage tab.','这天没有安排场次，工作室空闲。':'Nothing scheduled this day — the studio is free.','给这天新增场次':'Add a session for this day','名单':'Roster','场':' sessions','已约':'Booked ','还剩':'left ','给它加场次':'Add a session',
 /* 名单 */
@@ -5237,7 +5498,7 @@ function rerenderAll(){
   try{ if(typeof weekOpen !== 'undefined' && weekOpen && typeof renderWeek === 'function') renderWeek(); }catch(e){}
   try{ if(typeof bkState !== 'undefined' && bkState && document.getElementById('sheet') && document.getElementById('sheet').classList.contains('open') && typeof drawSheet === 'function') drawSheet(); }catch(e){}
   try{ if(typeof syncSessDtText === 'function' && document.getElementById('sessSheet') && document.getElementById('sessSheet').classList.contains('open')) syncSessDtText(); }catch(e){}
-  try{ if(typeof applyRoute === 'function') applyRoute(); }catch(e){}
+  try{ if(!$('customerView').classList.contains('hidden')) applyRoute(); }catch(e){}
 }
 function setLang(l){
   if(l !== 'en' && l !== 'zh') return;
