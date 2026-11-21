@@ -171,6 +171,15 @@ img{ display:block; max-width:100%; }
 .wtxn .wn{ text-align:right; font-weight:900; font-size:14px; flex:none; }
 .wtxn .wn small{ display:block; font-weight:400; font-size:10.5px; color:var(--ink2); }
 .wtxn .wn.in{ color:var(--sage); } .wtxn .wn.out{ color:var(--ink); }
+.notif-row{ display:flex; align-items:flex-start; gap:10px; width:100%; text-align:left; padding:10px 0; border-bottom:1px dashed var(--line); color:var(--ink); }
+.notif-row:last-child{ border-bottom:none; }
+.notif-row .ndot{ flex:none; width:8px; height:8px; border-radius:50%; background:var(--red); margin-top:7px; }
+.notif-row.read .ndot{ background:var(--line); }
+.notif-row .nm2{ flex:1; min-width:0; }
+.notif-row .nm2 b{ font-size:13.5px; display:block; line-height:1.45; }
+.notif-row.read .nm2 b{ font-weight:500; color:var(--ink2); }
+.notif-row .nm2 small{ font-size:11.5px; color:var(--ink2); display:block; line-height:1.55; margin-top:1px; }
+.notif-row .nt{ flex:none; font-size:11px; color:var(--ink2); margin-top:2px; }
 .mine-card{ margin:0 18px 12px; background:var(--card); border:1px solid var(--line); border-radius:18px; padding:14px 15px; }
 .mine-card .mh{ display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
 .mine-card h4{ margin:0; font-size:15px; line-height:1.45; }
@@ -971,11 +980,11 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
         <!-- 客户充值（店主代充，入口只在店主端） -->
         <div id="atab-wallet" class="hidden">
           <div class="pagehead" style="padding-top:14px">
-            <p>客人线下把钱给你（比如现金或转账收到 $200）之后，在这里按手机号找到 TA、输金额充值，钱立刻进 TA 的钱包余额，TA 在自己那边马上能看到。每一笔代充都会写进流水：谁充的、给谁充、多少钱、什么时候、怎么收的钱。</p>
+            <p>客人线下把钱给你（比如现金或转账收到 $200）之后，在这里按手机号或邮箱找到 TA、输金额充值，钱立刻进 TA 的钱包余额，TA 在自己那边马上能看到。每一笔代充都会写进流水：谁充的、给谁充、多少钱、什么时候、怎么收的钱。</p>
           </div>
           <div class="formbox" style="margin-top:14px">
             <h4>给客户充值</h4>
-            <div class="field"><label for="owPhone">客户手机号</label><input id="owPhone" type="tel" placeholder="输入客户手机号查找" /></div>
+            <div class="field"><label for="owPhone">客户手机号或邮箱</label><input id="owPhone" type="text" placeholder="输入客户手机号或邮箱查找" /></div>
             <button class="submit" style="background:var(--ink)" type="button" onclick="ownerFindCustomer()">查找客户</button>
             <div id="owResult"></div>
           </div>
@@ -1085,9 +1094,10 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
         <div class="backrow"><button class="backbtn" onclick="closeProfile()" aria-label="返回"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button></div>
         <div class="dbody" style="padding-top:62px">
           <h2 class="serif" style="margin-top:0">个人资料</h2>
-          <p class="ddesc">填一次就行：以后预约时姓名和手机号会自动带入，不用每次重填。手机号是认人的关键，你的预约、上课记录和钱包余额都会按这个手机号归到你名下。</p>
+          <p class="ddesc">填一次就行：以后预约时姓名和联系方式会自动带入，不用每次重填。手机号或邮箱是认人的关键（至少填一个），你的预约、上课记录和钱包余额都会按它归到你名下。</p>
           <div class="field"><label for="pfName">姓名</label><input id="pfName" placeholder="例如：Ada" autocomplete="name" /></div>
           <div class="field"><label for="pfPhone">手机号</label><input id="pfPhone" type="tel" placeholder="例如：(206) 555-0100" autocomplete="tel" /></div>
+          <div class="field"><label for="pfEmail">邮箱</label><input id="pfEmail" type="email" placeholder="例如：you@example.com" autocomplete="email" /></div>
           <button class="wide-btn" style="margin-top:22px;background:var(--brass)" onclick="saveProfile()">保存资料</button>
           <button class="ghost-btn" onclick="closeProfile()">取消</button>
         </div>
@@ -1493,15 +1503,25 @@ function fetchMyProfile(){
 function syncPhoneLink(phoneFromForm){
   /* 把登录账号和手机号关联：profiles.phone + customers.auth_user_id */
   var phone = (phoneFromForm || '').trim() || (authProfile && authProfile.phone) || (myProfile && myProfile.phone) || '';
-  if(!phone) return Promise.resolve();
+  if(!phone){
+    /* 没有手机号时用登录邮箱认人：按邮箱找 / 建顾客记录并绑定（绑定规则不变，只在没绑过时绑） */
+    var em0 = (authUser && authUser.email) || (myProfile && myProfile.email) || '';
+    if(!em0 || !authUser) return Promise.resolve();
+    var nm0 = (authProfile && (authProfile.display_name || authProfile.name)) || myProfile.name || '';
+    if(nm0 && !myProfile.name) myProfile.name = nm0;
+    return ensureCustomer(myProfile.name || nm0 || '', '', em0).then(function(c){
+      if(c && c.email && !myProfile.email) myProfile.email = c.email;
+    }).catch(function(){});
+  }
   myProfile.phone = phone;
   if(authProfile && !authProfile.phone){ authProfile.phone = phone; dbFire(sbReq('profiles?id=eq.' + encodeURIComponent(authUser.id), { method:'PATCH', body:{ phone: phone } })); }
   else if(authProfile && phoneFromForm && authProfile.phone !== phone){ authProfile.phone = phone; dbFire(sbReq('profiles?id=eq.' + encodeURIComponent(authUser.id), { method:'PATCH', body:{ phone: phone } })); }
   var nm = (authProfile && (authProfile.display_name || authProfile.name)) || myProfile.name || '';
   if(nm && !myProfile.name) myProfile.name = nm;
   if(authProfile && authProfile.display_name && !myProfile.name) myProfile.name = authProfile.display_name;
-  /* 按手机号找/建 customer，并写 auth_user_id 关联登录账号 */
-  return ensureCustomer(myProfile.name || nm || '', phone).then(function(c){
+  /* 按手机号找/建 customer（登录邮箱也参与匹配，任一对上即同一人），并写 auth_user_id 关联登录账号 */
+  return ensureCustomer(myProfile.name || nm || '', phone, (authUser && authUser.email) || myProfile.email || '').then(function(c){
+    if(c && c.email && !myProfile.email) myProfile.email = c.email;
     if(dbMode && c && c.id && authUser && !c.auth_user_id){
       dbFire(sbReq('customers?id=eq.' + c.id, { method:'PATCH', body:{ auth_user_id: authUser.id } }));
       c.auth_user_id = authUser.id;
@@ -1514,6 +1534,11 @@ function applyProfileToMine(){
     var nm = authProfile.display_name || authProfile.name || '';
     if(nm) myProfile.name = nm;
     if(authProfile.teacher_name && currentRole()==='teacher') teacherName = authProfile.teacher_name;
+  }
+  if(authUser && authUser.email && !myProfile.email) myProfile.email = authUser.email;
+  if(typeof myCustomer !== 'undefined' && myCustomer){
+    if(myCustomer.phone && !myProfile.phone) myProfile.phone = myCustomer.phone;
+    if(myCustomer.email && !myProfile.email) myProfile.email = myCustomer.email;
   }
 }
 function routeAfterLogin(){
@@ -1708,8 +1733,8 @@ function payLabelOf(b){
 function mapBookingRow(r){
   var sessInfo = r.session_id ? sessItemMap[r.session_id] : null;
   var cust = r.customer_id ? custMap[r.customer_id] : null;
-  var b = { dbId: r.id, code: r.booking_code, itemId: sessInfo ? sessInfo.itemId : null, sessId: r.session_id || null,
-    name: cust ? (cust.name || '') : '', phone: cust ? (cust.phone || '') : '',
+  var b = { dbId: r.id, custId: r.customer_id || null, code: r.booking_code, itemId: sessInfo ? sessInfo.itemId : null, sessId: r.session_id || null,
+    name: cust ? (cust.name || '') : '', phone: cust ? (cust.phone || '') : '', email: cust ? (cust.email || '') : '',
     qty: r.party_size || 1, hours: r.hours || null, total: (r.total_cents || 0)/100,
     payMethod: r.pay_method === 'balance' ? 'balance' : r.pay_method === 'wechat' ? 'wechat' : (r.pay_method ? 'stripe' : null),
     payStatus: r.pay_status || 'unpaid',
@@ -1718,7 +1743,7 @@ function mapBookingRow(r){
     startsAt: r.starts_at ? new Date(r.starts_at) : null, isVenue: !!r.is_venue };
   b.pay = payLabelOf(b);
   if(b.itemId){ var pit = findItem(b.itemId); if(pit && pit.cat === 'package') b.pkg = b.code.replace(/-\d+$/, ''); if(pit && pit.cat === 'venue' && !b.hours && pit.price > 0) b.hours = Math.max(1, Math.round(b.total / pit.price)); }
-  b.mine = !!(typeof myProfile !== 'undefined' && myProfile.phone && b.phone === myProfile.phone);
+  b.mine = !!(typeof myProfile !== 'undefined' && ((myProfile.phone && b.phone === myProfile.phone) || (myProfile.email && b.email && b.email === myProfile.email) || (typeof myCustomer !== 'undefined' && myCustomer && myCustomer.id && b.custId === myCustomer.id)));
   return b;
 }
 var allBookings = [];   /* 店主端全量预约：仅店主解锁后才从库里加载，普通访客不会收到全量名单 */
@@ -1775,7 +1800,7 @@ function consolidateSingleSpace(){
 }
 function deriveHistory(){
   myHistory = [];
-  if(!dbMode || !myProfile.phone) return;
+  if(!dbMode || (!myProfile.phone && !myProfile.email)) return;
   var today = new Date(); today.setHours(0, 0, 0, 0);
   bookings.forEach(function(b){
     if(!b.mine || b.status === 'cancelled' || !b.itemId) return;
@@ -1828,17 +1853,19 @@ function fetchCatalog(){
   });
 }
 function loadMine(){
-  /* 只查当前手机号自己的 customer + bookings，绝不把全量名单下发给普通访客 */
-  if(!dbMode || !myProfile.phone) return Promise.resolve();
-  return findCustomerByPhone(myProfile.phone).then(function(c){
+  /* 只查当前手机号 / 邮箱自己的 customer + bookings，绝不把全量名单下发给普通访客 */
+  if(!dbMode || (!myProfile.phone && !myProfile.email)) return Promise.resolve();
+  return findCustomer(myProfile.phone, myProfile.email).then(function(c){
     if(!c){ bookings = []; deriveHistory(); return; }
     myCustomer = c;
+    if(c.phone && !myProfile.phone) myProfile.phone = c.phone;
+    if(c.email && !myProfile.email) myProfile.email = c.email;
     custMap = {}; custMap[c.id] = c;
     return sbReq('bookings?select=*&customer_id=eq.' + c.id + '&order=created_at.desc').then(function(rows){
       bookings = (rows || []).map(mapBookingRow);
       deriveHistory();
       return refreshWallet();
-    });
+    }).then(function(){ return loadMyNotifications(); });
   }).catch(function(){});
 }
 function loadAdminData(){
@@ -1874,34 +1901,61 @@ function refreshDynamic(){
     if(typeof adminUnlocked !== 'undefined' && adminUnlocked) return loadAdminData();
   }).catch(function(){});
 }
-function findCustomerByPhone(phone){
-  if(!dbMode){
-    var lw = localWallet[phone];
-    var bk = null;
-    for(var i = 0; i < bookings.length; i++){ if(bookings[i].phone === phone){ bk = bookings[i]; break; } }
-    if(!lw && !bk) return Promise.resolve(null);
-    return Promise.resolve({ id: null, phone: phone, name: (lw && lw.name) || (bk ? bk.name : ''), balance_cents: lw ? lw.balanceCents : 0 });
-  }
-  return sbReq('customers?select=*&phone=eq.' + encodeURIComponent(phone)).then(function(rows){ return (rows && rows.length) ? rows[0] : null; });
+/* 顾客身份：手机号或邮箱任一即可。找记录时先按手机号、再按邮箱，任一匹配即同一人；
+   本机演示模式下钱包按「手机号 || 邮箱」这个 key 归户。 */
+function custKeyOf(phone, email){ return (phone || '').trim() || (email || '').trim(); }
+/* 演示模式找钱包：先按 key 直取，再按记录里的手机号 / 邮箱字段扫一遍（同一人可能先用手机号、后用邮箱） */
+function lwFind(phone, email){
+  var key = custKeyOf(phone, email);
+  if(key && localWallet[key]) return { key: key, lw: localWallet[key] };
+  var ks = Object.keys(localWallet);
+  for(var i = 0; i < ks.length; i++){ var w = localWallet[ks[i]]; if((phone && w.phone === phone) || (email && w.email === email)) return { key: ks[i], lw: w }; }
+  return { key: key, lw: null };
 }
-function ensureCustomer(name, phone){
+function findCustomer(phone, email){
+  phone = (phone || '').trim(); email = (email || '').trim();
   if(!dbMode){
-    var lw = localWallet[phone] || (localWallet[phone] = { name: name || '', balanceCents: 0, txns: [] });
+    var lw = lwFind(phone, email).lw;
+    var bk = null;
+    for(var i = 0; i < bookings.length; i++){ if((phone && bookings[i].phone === phone) || (email && bookings[i].email === email)){ bk = bookings[i]; break; } }
+    if(!lw && !bk) return Promise.resolve(null);
+    return Promise.resolve({ id: null, phone: (lw && lw.phone) || (bk ? bk.phone : '') || phone, email: (lw && lw.email) || (bk ? (bk.email || '') : '') || email, name: (lw && lw.name) || (bk ? bk.name : ''), balance_cents: lw ? lw.balanceCents : 0 });
+  }
+  var byPhone = phone ? sbReq('customers?select=*&phone=eq.' + encodeURIComponent(phone)).then(function(rows){ return (rows && rows.length) ? rows[0] : null; }) : Promise.resolve(null);
+  return byPhone.then(function(c){
+    if(c || !email) return c;
+    return sbReq('customers?select=*&email=eq.' + encodeURIComponent(email)).then(function(rows){ return (rows && rows.length) ? rows[0] : null; });
+  });
+}
+function findCustomerByPhone(phone){ return findCustomer(phone, ''); }
+function ensureCustomer(name, phone, email){
+  phone = (phone || '').trim(); email = (email || '').trim();
+  if(!dbMode){
+    var f0 = lwFind(phone, email);
+    var lw = f0.lw || (localWallet[f0.key] = { name: name || '', balanceCents: 0, txns: [], phone: phone, email: email });
     if(name) lw.name = name;
-    myCustomer = { id: null, phone: phone, name: lw.name, balance_cents: lw.balanceCents };
+    if(phone && !lw.phone) lw.phone = phone;
+    if(email && !lw.email) lw.email = email;
+    myCustomer = { id: null, phone: lw.phone || '', email: lw.email || '', name: lw.name, balance_cents: lw.balanceCents };
     walletState = { balanceCents: lw.balanceCents, txns: lw.txns };
     return Promise.resolve(myCustomer);
   }
-  return findCustomerByPhone(phone).then(function(c){
+  return findCustomer(phone, email).then(function(c){
     if(c){
       var patch = {};
       if(name && c.name !== name) patch.name = name;
+      /* 只补空缺，绝不覆盖已有的手机号 / 邮箱 / 登录账号绑定 */
+      if(email && !c.email) patch.email = email;
+      if(phone && !c.phone) patch.phone = phone;
       if(typeof authUser !== 'undefined' && authUser && !c.auth_user_id) patch.auth_user_id = authUser.id;
-      if(Object.keys(patch).length) dbFire(sbReq('customers?id=eq.' + c.id, { method: 'PATCH', body: patch }));
+      if(Object.keys(patch).length){
+        dbFire(sbReq('customers?id=eq.' + c.id, { method: 'PATCH', body: patch }));
+        Object.keys(patch).forEach(function(k){ c[k] = patch[k]; });
+      }
       myCustomer = c;
       return refreshWallet().then(function(){ return myCustomer; });
     }
-    var newBody = { phone: phone, name: name || null };
+    var newBody = { phone: phone || null, email: email || null, name: name || null };
     if(typeof authUser !== 'undefined' && authUser) newBody.auth_user_id = authUser.id;
     return sbReq('customers', { method: 'POST', body: newBody, prefer: 'return=representation' }).then(function(created){
       myCustomer = created[0];
@@ -1910,15 +1964,16 @@ function ensureCustomer(name, phone){
   });
 }
 function refreshWallet(){
-  if(!myProfile.phone) return Promise.resolve();
+  if(!myProfile.phone && !myProfile.email) return Promise.resolve();
   if(!dbMode){
-    var lw = localWallet[myProfile.phone] || (localWallet[myProfile.phone] = { name: myProfile.name || '', balanceCents: 0, txns: [] });
+    var f1 = lwFind(myProfile.phone, myProfile.email);
+    var lw = f1.lw || (localWallet[f1.key] = { name: myProfile.name || '', balanceCents: 0, txns: [], phone: myProfile.phone || '', email: myProfile.email || '' });
     walletState = { balanceCents: lw.balanceCents, txns: lw.txns };
     if(myCustomer) myCustomer.balance_cents = lw.balanceCents;
     return Promise.resolve();
   }
-  return sbReq('customers?select=*&phone=eq.' + encodeURIComponent(myProfile.phone)).then(function(rows){
-    if(rows && rows.length){ myCustomer = rows[0]; walletState.balanceCents = rows[0].balance_cents || 0; }
+  return findCustomer(myProfile.phone, myProfile.email).then(function(c){
+    if(c){ myCustomer = c; walletState.balanceCents = c.balance_cents || 0; }
     if(!myCustomer) return;
     return sbReq('wallet_transactions?select=*&customer_id=eq.' + myCustomer.id + '&order=created_at.desc&limit=50')
       .then(function(txns){ walletState.txns = txns || []; })
@@ -1928,10 +1983,11 @@ function refreshWallet(){
 function walletCreditTopup(customer, amountCents, source, method, note){
   var idem = 'topup-' + Date.now() + '-' + Math.floor(Math.random() * 1e6);
   if(!dbMode){
-    var lw = localWallet[customer.phone] || (localWallet[customer.phone] = { name: customer.name || '', balanceCents: 0, txns: [] });
+    var f2 = lwFind(customer.phone, customer.email);
+    var lw = f2.lw || (localWallet[f2.key] = { name: customer.name || '', balanceCents: 0, txns: [], phone: customer.phone || '', email: customer.email || '' });
     lw.balanceCents += amountCents;
     lw.txns.unshift({ type: 'topup', amount_cents: amountCents, balance_after_cents: lw.balanceCents, source: source, method: method, note: note, created_at: new Date().toISOString() });
-    if(myProfile.phone === customer.phone){ walletState = { balanceCents: lw.balanceCents, txns: lw.txns }; }
+    if(lwFind(myProfile.phone, myProfile.email).key === f2.key){ walletState = { balanceCents: lw.balanceCents, txns: lw.txns }; }
     return Promise.resolve(lw.balanceCents);
   }
   return sbRpc('credit_wallet', { p_customer: customer.id, p_amount: amountCents, p_source: source, p_method: method, p_note: note, p_idem: idem })
@@ -1945,7 +2001,7 @@ function walletCreditTopup(customer, amountCents, source, method, note){
 }
 function walletAdjust(amountCents, type, bookingDbId, note){
   if(!dbMode){
-    var lw = localWallet[myProfile.phone]; if(!lw) return Promise.resolve();
+    var lw = lwFind(myProfile.phone, myProfile.email).lw; if(!lw) return Promise.resolve();
     lw.balanceCents += (type === 'refund' ? amountCents : -amountCents);
     lw.txns.unshift({ type: type, amount_cents: amountCents, balance_after_cents: lw.balanceCents, source: 'self', method: null, note: note, created_at: new Date().toISOString() });
     walletState = { balanceCents: lw.balanceCents, txns: lw.txns };
@@ -1960,14 +2016,79 @@ function walletAdjust(amountCents, type, bookingDbId, note){
   }).then(function(){ return refreshWallet(); });
 }
 function topupSelf(dollars){
-  if(!myProfile.phone){ toast('先填姓名和手机号，钱包按手机号认人'); openProfile(); return; }
-  ensureCustomer(myProfile.name, myProfile.phone).then(function(c){
+  if(!myProfile.phone && !myProfile.email){ toast('先填姓名，再填手机号或邮箱，钱包按手机号或邮箱认人'); openProfile(); return; }
+  ensureCustomer(myProfile.name, myProfile.phone, myProfile.email).then(function(c){
     return walletCreditTopup(c, dollars * 100, 'self', 'other', '网页版 Stripe 充值');
   }).then(function(){
     renderMy();
     if($('sheet').classList.contains('open')) drawSheet();
     toast('已充值 ' + money(dollars) + '，当前余额 ' + money((walletState.balanceCents || 0) / 100));
   }).catch(function(e){ toastDbErr('充值没成功，请稍后再试', e); });
+}
+/* ---------------- 通知（notifications 表） ----------------
+   店主充值成功后写两条：站内通知 channel='inapp'、status='delivered'，顾客在「我的」里立刻能看到；
+   再按确认方式写一条短信 / 邮件记录 channel='sms' / 'email'、status='queued'，
+   等发送服务来取了发——现在没有发送服务，只排队，不假装已发送。
+   本机演示模式下同样在本页内存里模拟这两条，方便离线看效果。 */
+var myNotifications = [];
+var localNotifs = {};   /* 演示模式：key（手机号 || 邮箱）-> 通知数组 */
+function loadMyNotifications(){
+  if(!dbMode){
+    var key = lwFind(myProfile.phone, myProfile.email).key || custKeyOf(myProfile.phone, myProfile.email);
+    myNotifications = key ? (localNotifs[key] || []).slice() : [];
+    return Promise.resolve();
+  }
+  if(!myCustomer || !myCustomer.id){ myNotifications = []; return Promise.resolve(); }
+  return sbReq('notifications?select=*&customer_id=eq.' + myCustomer.id + '&channel=eq.inapp&order=created_at.desc&limit=20')
+    .then(function(rows){ myNotifications = rows || []; })
+    .catch(function(){ myNotifications = []; });
+}
+function markNotifRead(id){
+  var n = null;
+  myNotifications.forEach(function(x){ if(x.id === id) n = x; });
+  if(!n || n.read_at) return;
+  n.read_at = new Date().toISOString();
+  if(dbMode) dbFire(sbReq('notifications?id=eq.' + encodeURIComponent(id), { method: 'PATCH', body: { read_at: n.read_at } }));
+  renderMy();
+}
+function notifyTopup(customer, amountCents, balanceCents, via, ident){
+  var title = '充值到账';
+  var body = '店主代充 · ' + money(amountCents / 100) + ' 已到账，当前余额 ' + money(balanceCents / 100) + '。';
+  var rows = [
+    { kind: 'topup', title: title, body: body, channel: 'inapp', status: 'delivered' },
+    { kind: 'topup', title: title, body: body, channel: via === 'email' ? 'email' : 'sms', status: 'queued' }
+  ];
+  if(!dbMode){
+    var key = lwFind(customer.phone, customer.email).key || ident;
+    if(!key) return Promise.resolve();
+    var arr = localNotifs[key] || (localNotifs[key] = []);
+    rows.forEach(function(r){ arr.unshift({ id: 'ln' + Date.now() + Math.floor(Math.random() * 1e6), customer_id: null, kind: r.kind, title: r.title, body: r.body, channel: r.channel, status: r.status, created_at: new Date().toISOString(), read_at: null }); });
+    if((lwFind(myProfile.phone, myProfile.email).key || custKeyOf(myProfile.phone, myProfile.email)) === key) return loadMyNotifications();
+    return Promise.resolve();
+  }
+  if(!customer || !customer.id) return Promise.resolve();
+  var posts = rows.map(function(r){
+    return sbReq('notifications', { method: 'POST', body: { customer_id: customer.id, kind: r.kind, title: r.title, body: r.body, channel: r.channel, status: r.status } }).catch(function(){});
+  });
+  return Promise.all(posts);
+}
+function notifCardEl(){
+  var src = myNotifications;
+  if(!dbMode){
+    var nkey = lwFind(myProfile.phone, myProfile.email).key || custKeyOf(myProfile.phone, myProfile.email);
+    if(nkey && localNotifs[nkey]) src = localNotifs[nkey];
+  }
+  var list = (src || []).filter(function(n){ return n.channel === 'inapp'; });
+  if(!list.length) return null;
+  var unread = list.filter(function(n){ return !n.read_at; }).length;
+  var el = document.createElement('div'); el.className = 'mine-card';
+  el.innerHTML = '<div class="mh"><h4>通知</h4>' + (unread ? '<span class="tag red">' + unread + ' 条未读</span>' : '<span class="tag">都看过了</span>') + '</div>' +
+    list.slice(0, 10).map(function(n){
+      var when = n.created_at ? new Date(n.created_at).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+      return '<button type="button" class="notif-row' + (n.read_at ? ' read' : '') + '" onclick="markNotifRead(\'' + n.id + '\')"><span class="ndot"></span><span class="nm2"><b>' + esc(n.title || '') + '</b><small>' + esc(n.body || '') + '</small></span><span class="nt">' + when + '</span></button>';
+    }).join('') +
+    (unread ? '<p class="note-p" style="margin-top:8px">点一条通知就会标为已读。</p>' : '');
+  return el;
 }
 function initApp(){
   var grid = $('cardGrid');
@@ -2219,9 +2340,9 @@ function mySubHtml(title, small){
 }
 function walletCardEl(){
   var el = document.createElement('div'); el.className = 'wallet-card';
-  if(!myProfile.phone){
+  if(!myProfile.phone && !myProfile.email){
     el.innerHTML = '<div class="mh"><h4>钱包余额</h4><span class="tag brass">充值后约课直接扣</span></div>' +
-      '<p class="note-p" style="margin-top:8px">先填好个人资料（姓名 + 手机号），钱包就会按你的手机号归户，可以提前充值，约课时用余额付款。</p>' +
+      '<p class="note-p" style="margin-top:8px">先填好个人资料（姓名 + 手机号或邮箱），钱包就会按你的手机号或邮箱归户，可以提前充值，约课时用余额付款。</p>' +
       '<div class="wtop"><button class="bookbtn brassbtn" onclick="openProfile()">先填资料</button></div>';
     return el;
   }
@@ -2237,7 +2358,7 @@ function walletCardEl(){
     return '<div class="wtxn"><span class="wm"><b>' + (typeLabel[t.type] || t.type) + '</b><small>' + esc(meta) + '</small></span>' +
       '<span class="wn ' + (t.type === 'spend' ? 'out' : 'in') + '">' + sign + money((t.amount_cents || 0) / 100) + '<small>余额 ' + money((t.balance_after_cents || 0) / 100) + '</small></span></div>';
   }).join('');
-  el.innerHTML = '<div class="mh"><h4>钱包余额</h4><span class="tag brass">' + esc(myProfile.phone) + '</span></div>' +
+  el.innerHTML = '<div class="mh"><h4>钱包余额</h4><span class="tag brass">' + esc(myProfile.phone || myProfile.email) + '</span></div>' +
     '<div class="wbal">' + money(bal / 100) + '</div>' +
     '<p class="note-p">约课时选「余额支付」直接扣这里的钱，扣完实时更新；用余额付的预约取消后，钱自动退回这里。</p>' +
     '<div class="wtop"><span>充值</span><button class="ghostbtn" onclick="topupSelf(50)">$50</button><button class="ghostbtn" onclick="topupSelf(100)">$100</button><button class="ghostbtn" onclick="topupSelf(200)">$200</button></div>' +
@@ -2290,16 +2411,18 @@ function infoCardEl(activeCount){
   if(acctName && acctEmail) subParts.push(acctEmail);
   if(role) subParts.push('身份 · ' + roleLabel(role));
   if(myProfile.phone) subParts.push(myProfile.phone);
-  if(!subParts.length) subParts.push(hasPf ? 'ETERN.III 手碟馆' : '完善资料，预约自动带入姓名手机号');
+  if(myProfile.email) subParts.push(myProfile.email);
+  if(!subParts.length) subParts.push(hasPf ? 'ETERN.III 手碟馆' : '完善资料，预约自动带入姓名和联系方式');
   var wrap = document.createElement('div');
   var prof = document.createElement('div'); prof.className='profile';
   prof.innerHTML = '<div class="av">'+initial(title)+'</div><div style="min-width:0"><b>'+esc(title)+'</b><small>'+esc(subParts.join(' · '))+'</small></div><div class="pts"><b>'+activeCount+'</b><small>待上预约</small></div><button class="pfbtn" onclick="openProfile()">'+(hasPf ? '编辑资料' : '填写资料')+'</button>';
   wrap.appendChild(prof);
   var card = document.createElement('div'); card.className='mine-card';
-  card.innerHTML = '<div class="mh"><h4>个人资料</h4><span class="tag brass">按手机号认人</span></div>' +
+  card.innerHTML = '<div class="mh"><h4>个人资料</h4><span class="tag brass">按手机号或邮箱认人</span></div>' +
     '<div class="meta mmeta"><span>姓名：'+(hasPf ? esc(myProfile.name) : '还没填写')+'</span></div>' +
     '<div class="meta mmeta"><span>手机号：'+(myProfile.phone ? esc(myProfile.phone) : '还没填写')+'</span></div>' +
-    '<p class="note-p" style="margin-top:8px">填一次就行：以后预约时姓名和手机号会自动带入。你的预约、上课记录和钱包余额都按这个手机号归到你名下。</p>' +
+    '<div class="meta mmeta"><span>邮箱：'+(myProfile.email ? esc(myProfile.email) : '还没填写')+'</span></div>' +
+    '<p class="note-p" style="margin-top:8px">填一次就行：以后预约时姓名和联系方式会自动带入。你的预约、上课记录和钱包余额都按你的手机号或邮箱归到你名下。</p>' +
     '<div class="mfoot"><span class="code">ETERN.III 手碟馆会员</span><button class="ghostbtn" onclick="openProfile()">'+(hasPf ? '修改资料' : '填写资料')+'</button></div>';
   wrap.appendChild(card);
   return wrap;
@@ -2320,6 +2443,8 @@ function renderMy(){
   $('myCount').classList.toggle('hidden', !active.length);
   wlBox.appendChild(walletCardEl());
   inBox.appendChild(infoCardEl(active.length));
+  var nCard = notifCardEl();
+  if(nCard) inBox.appendChild(nCard);
   switchMineTab(mineTab);
   var up = document.createElement('div'); up.innerHTML = mySubHtml('待上的预约', active.length + ' 单待上');
   list.appendChild(up);
@@ -2409,23 +2534,25 @@ function goMy(){ switchMineTab('bookings'); goPage('mine'); }
 
 /* ---------------- 预约流程 ---------------- */
 /* ---------------- 个人资料（手机号是认人的关键） ---------------- */
-var myProfile = { name:'', phone:'' };
+var myProfile = { name:'', phone:'', email:'' };
 function openProfile(){
   $('pfName').value = myProfile.name;
   $('pfPhone').value = myProfile.phone;
+  $('pfEmail').value = myProfile.email;
   $('profileSheet').classList.add('open');
   setTimeout(function(){ $('pfName').focus(); }, 80);
 }
 function closeProfile(){ $('profileSheet').classList.remove('open'); }
 function saveProfile(){
-  var n = $('pfName').value.trim(), p = $('pfPhone').value.trim();
+  var n = $('pfName').value.trim(), p = $('pfPhone').value.trim(), em = $('pfEmail').value.trim();
   if(!n){ toast('请填写姓名'); $('pfName').focus(); return; }
-  if(!p){ toast('请填写手机号，这是认人的关键'); $('pfPhone').focus(); return; }
-  myProfile.name = n; myProfile.phone = p;
-  if(authUser && dbMode) dbFire(sbReq('profiles?id=eq.' + encodeURIComponent(authUser.id), { method: 'PATCH', body: { phone: p } }));
-  if(authProfile) authProfile.phone = p;
+  if(!p && !em){ toast('手机号和邮箱至少填一个，这是认人的关键'); $('pfPhone').focus(); return; }
+  if(em && em.indexOf('@') < 0){ toast('请填正确的邮箱'); $('pfEmail').focus(); return; }
+  myProfile.name = n; myProfile.phone = p; myProfile.email = em;
+  if(authUser && dbMode && p) dbFire(sbReq('profiles?id=eq.' + encodeURIComponent(authUser.id), { method: 'PATCH', body: { phone: p } }));
+  if(authProfile && p) authProfile.phone = p;
   closeProfile();
-  ensureCustomer(n, p).then(function(){
+  ensureCustomer(n, p, em).then(function(){
     return dbMode ? refreshDynamic() : Promise.resolve();
   }).then(function(){
     renderMy();
@@ -2624,8 +2751,9 @@ function confirmBooking(){
   var it = findItem(bkState.itemId);
   var name = $('bkName').value.trim();
   var phone = $('bkPhone').value.trim();
+  var bkEmail = myProfile.email || (authUser && authUser.email) || '';
   if(!name){ toast('请填写姓名'); $('bkName').focus(); return; }
-  if(!phone){ toast('请填写手机号，店主靠它认人'); $('bkPhone').focus(); return; }
+  if(!phone && !bkEmail){ toast('请填写手机号，店主靠它认人'); $('bkPhone').focus(); return; }
   var pay = document.querySelector('input[name="pay"]:checked').value;
   var isBalance = pay === '余额支付';
   var total = it.cat === 'venue' ? it.price * bkState.vDur : it.price * bkState.qty;
@@ -2639,11 +2767,11 @@ function confirmBooking(){
     if(!s0){ toast('请先选择一个场次'); return; }
     if(remain(s0) < bkState.qty){ toast('刚刚被约走了，名额不足，请换一场'); drawSheet(); return; }
   }
-  myProfile.name = name; myProfile.phone = phone;
+  myProfile.name = name; if(phone) myProfile.phone = phone;
   var btn = document.querySelector('#sheet .confirm');
   if(btn){ btn.disabled = true; btn.textContent = '提交中…'; }
   function doneBtn(){ if(btn){ btn.disabled = false; btn.textContent = '确认预约'; } }
-  ensureCustomer(name, phone).then(function(){
+  ensureCustomer(name, phone, bkEmail).then(function(){
     if(isBalance && Math.round(total * 100) > (walletState.balanceCents || 0)){
       doneBtn(); closeSheet(); goMy();
       toast('余额不足，还差 ' + money(total - (walletState.balanceCents || 0) / 100) + '，请先充值再约');
@@ -2674,11 +2802,11 @@ function bookLocal(it, pay, total){
     s = { id: 'v' + Date.now(), date: new Date(bkState.vDate), time: fmtMin(bkState.vStart) + '–' + fmtMin(bkState.vStart + bkState.vDur * 60), total: 1, booked: 1 };
     it.sessions.push(s);
     it.sessions.sort(function(a, b2){ return a.date - b2.date; });
-    b = { code: code, itemId: it.id, sessId: s.id, name: myProfile.name, phone: myProfile.phone, qty: 1, total: total, pay: pay, payMethod: isBalance ? 'balance' : 'stripe', status: 'paid', hours: bkState.vDur, mine: true };
+    b = { code: code, itemId: it.id, sessId: s.id, name: myProfile.name, phone: myProfile.phone, email: myProfile.email, qty: 1, total: total, pay: pay, payMethod: isBalance ? 'balance' : 'stripe', status: 'paid', hours: bkState.vDur, mine: true };
   } else {
     s = findSess(it, bkState.sessId);
     s.booked += bkState.qty;
-    b = { code: code, itemId: it.id, sessId: s.id, name: myProfile.name, phone: myProfile.phone, qty: bkState.qty, total: total, pay: pay, payMethod: isBalance ? 'balance' : 'stripe', status: 'paid', mine: true };
+    b = { code: code, itemId: it.id, sessId: s.id, name: myProfile.name, phone: myProfile.phone, email: myProfile.email, qty: bkState.qty, total: total, pay: pay, payMethod: isBalance ? 'balance' : 'stripe', status: 'paid', mine: true };
   }
   bookings.push(b);
   if(isBalance) walletAdjust(Math.round(total * 100), 'spend', null, '余额支付 · ' + it.name + ' ' + code);
@@ -2755,7 +2883,7 @@ function bookPackageLocal(it, pay, total){
   var first = null;
   it.sessions.forEach(function(s, i){
     s.booked += bkState.qty;
-    var b = { code: code + '-' + (i + 1), pkg: code, itemId: it.id, sessId: s.id, name: myProfile.name, phone: myProfile.phone, qty: bkState.qty, total: i === 0 ? total : 0, pay: pay, payMethod: isBalance ? 'balance' : 'stripe', status: 'paid', mine: true };
+    var b = { code: code + '-' + (i + 1), pkg: code, itemId: it.id, sessId: s.id, name: myProfile.name, phone: myProfile.phone, email: myProfile.email, qty: bkState.qty, total: i === 0 ? total : 0, pay: pay, payMethod: isBalance ? 'balance' : 'stripe', status: 'paid', mine: true };
     bookings.push(b);
     if(i === 0) first = b;
   });
@@ -3782,46 +3910,71 @@ function exportAllRosters(){
 
 /* ---------------- 店主代充（入口只在店主端） ---------------- */
 function renderOwnerWallet(){ renderOwnerTopups(); }
+/* 店主充值待确认的查找结果：ident 是输入的手机号或邮箱，via 决定充值确认通知走短信还是邮件 */
+var owPending = null;
 function ownerFindCustomer(){
-  var phone = $('owPhone').value.trim();
-  if(!phone){ toast('先输入客户手机号'); return; }
-  findCustomerByPhone(phone).then(function(c){
+  var ident = $('owPhone').value.trim();
+  if(!ident){ toast('先输入客户手机号或邮箱'); return; }
+  var via = ident.indexOf('@') > 0 ? 'email' : 'phone';
+  findCustomer(via === 'phone' ? ident : '', via === 'email' ? ident : '').then(function(c){
     var box = $('owResult');
     if(!c){
-      box.innerHTML = '<p class="note-p" style="margin-top:12px">没找到这个手机号的客户。确认号码无误后，可以直接给 TA 建档并充值（建档只记手机号和下面这笔充值）：</p>' + owTopupFormHtml(phone);
+      owPending = { ident: ident, via: via, cust: null };
+      box.innerHTML = '<p class="note-p" style="margin-top:12px">没找到这个' + (via === 'email' ? '邮箱' : '手机号') + '的客户。确认无误后，可以直接给 TA 建档并充值（建档只记这个' + (via === 'email' ? '邮箱' : '手机号') + '和下面这笔充值）：</p>' + owTopupFormHtml();
       return;
     }
-    var cnt = bkAll().filter(function(b){ return b.phone === c.phone && b.status !== 'cancelled'; }).length;
-    box.innerHTML = '<p class="note-p" style="margin-top:12px">客户：<b style="color:var(--ink)">' + esc(c.name || '未留姓名') + '</b> · ' + esc(c.phone) + '<br />当前钱包余额 <b style="color:var(--brass);font-size:14px">' + money((c.balance_cents || 0) / 100) + '</b> · 共 ' + cnt + ' 单有效预约</p>' + owTopupFormHtml(phone);
+    owPending = { ident: ident, via: via, cust: c };
+    var cnt = bkAll().filter(function(b){ return b.status !== 'cancelled' && ((c.id && b.custId === c.id) || (c.phone && b.phone === c.phone)); }).length;
+    var confirmLine = via === 'email' ? '确认用邮箱：' + esc(c.email || ident) : '确认用手机号：' + esc(c.phone || ident);
+    var idLine = c.id ? ' · 会员编号 ' + esc(String(c.id).slice(0, 8)) : '';
+    box.innerHTML = '<p class="note-p" style="margin-top:12px">客户：<b style="color:var(--ink)">' + esc(c.name || '未留姓名') + '</b>' + idLine + '<br />' + confirmLine + '<br />当前钱包余额 <b style="color:var(--brass);font-size:14px">' + money((c.balance_cents || 0) / 100) + '</b> · 共 ' + cnt + ' 单有效预约</p>' + owTopupFormHtml();
   }).catch(function(e){ toastDbErr('查找没成功，请稍后再试', e); });
 }
-function owTopupFormHtml(phone){
+function owTopupFormHtml(){
   return '<div class="field"><label for="owAmt">充值金额（USD $）</label><input id="owAmt" type="number" min="1" step="1" placeholder="如：200" /></div>' +
     '<div class="field"><label for="owMethod">你是怎么收到这笔钱的</label><select id="owMethod"><option value="cash">现金</option><option value="transfer">线下转账</option><option value="other">其他</option></select></div>' +
-    '<button class="submit" type="button" onclick="ownerDoTopup(\'' + esc(phone) + '\')">确认充值到 TA 的钱包</button>';
+    '<button class="submit" type="button" onclick="ownerDoTopup()">确认充值到 TA 的钱包</button>';
 }
-function ownerDoTopup(phone){
+function ownerDoTopup(){
+  if(!owPending){ toast('先查找客户，核对无误再充值'); return; }
+  var ident = owPending.ident, via = owPending.via;
   var amtEl = $('owAmt'); var amt = amtEl ? parseFloat(amtEl.value) : 0;
   if(!amt || amt <= 0){ toast('请输入充值金额'); return; }
   var method = $('owMethod').value;
   var methodLabel = method === 'cash' ? '现金' : method === 'transfer' ? '线下转账' : '其他方式';
-  findCustomerByPhone(phone).then(function(c){
-    if(c) return c;
-    var bk = null;
-    for(var i = 0; i < bookings.length; i++){ if(bookings[i].phone === phone){ bk = bookings[i]; break; } }
-    var nm = bk ? bk.name : '';
-    if(!dbMode){
-      var lw = localWallet[phone] || (localWallet[phone] = { name: nm, balanceCents: 0, txns: [] });
-      return { id: null, phone: phone, name: nm, balance_cents: lw.balanceCents };
-    }
-    return sbReq('customers', { method: 'POST', body: { phone: phone, name: nm || null }, prefer: 'return=representation' }).then(function(rows){ return rows[0]; });
+  var amtCents = Math.round(amt * 100);
+  var startCust = owPending.cust ? Promise.resolve(owPending.cust)
+    : findCustomer(via === 'phone' ? ident : '', via === 'email' ? ident : '').then(function(c){
+      if(c) return c;
+      var bk = null;
+      for(var i = 0; i < bookings.length; i++){ if(bookings[i].phone === ident || bookings[i].email === ident){ bk = bookings[i]; break; } }
+      var nm = bk ? bk.name : '';
+      if(!dbMode){
+        var lw = localWallet[ident] || (localWallet[ident] = { name: nm, balanceCents: 0, txns: [], phone: via === 'phone' ? ident : '', email: via === 'email' ? ident : '' });
+        return { id: null, phone: lw.phone, email: lw.email, name: nm, balance_cents: lw.balanceCents };
+      }
+      var body = { phone: via === 'phone' ? ident : null, email: via === 'email' ? ident : null, name: nm || null };
+      return sbReq('customers', { method: 'POST', body: body, prefer: 'return=representation' }).then(function(rows){ return rows[0]; });
+    });
+  startCust.then(function(c){
+    return walletCreditTopup(c, amtCents, 'owner', method, '店主代充 · ' + methodLabel + '收款').then(function(){ return c; });
   }).then(function(c){
-    return walletCreditTopup(c, Math.round(amt * 100), 'owner', method, '店主代充 · ' + methodLabel + '收款');
+    /* 充值成功：取最新余额，写站内通知（立即 delivered）+ 按确认方式排一条短信 / 邮件（queued，等发送服务） */
+    var fresh = c;
+    if(dbMode && c.id){
+      return sbReq('customers?select=*&id=eq.' + encodeURIComponent(c.id)).then(function(rows){ if(rows && rows.length) fresh = rows[0]; }).catch(function(){}).then(function(){
+        return notifyTopup(fresh, amtCents, fresh.balance_cents || 0, via, ident);
+      }).then(function(){ return fresh; });
+    }
+    var lw2 = lwFind(c.phone, c.email).lw;
+    if(lw2) fresh = { id: c.id, phone: c.phone, email: c.email, name: c.name, balance_cents: lw2.balanceCents };
+    return notifyTopup(fresh, amtCents, fresh.balance_cents || 0, via, ident).then(function(){ return fresh; });
   }).then(function(){
-    toast('已给 ' + phone + ' 充值 ' + money(amt) + '（' + methodLabel + '），TA 那边立刻能看到');
+    toast('已给 ' + ident + ' 充值 ' + money(amt) + '（' + methodLabel + '），TA 那边立刻能看到');
     renderOwnerTopups();
     ownerFindCustomer();
-    if(myProfile.phone === phone) renderMy();
+    if(myCustomer && owPending && owPending.cust && myCustomer.id && owPending.cust.id === myCustomer.id) loadMyNotifications().then(function(){ renderMy(); });
+    else if(custKeyOf(myProfile.phone, myProfile.email) === ident) loadMyNotifications().then(function(){ renderMy(); });
   }).catch(function(e){ toastDbErr('充值没成功，请稍后再试', e); });
 }
 function ownerTopupRow(phone, t){
@@ -3850,7 +4003,7 @@ function renderOwnerTopups(){
     return chain.then(function(){
       box.innerHTML = rows.length ? rows.map(function(t){
         var c = custMap[t.customer_id];
-        return ownerTopupRow(c ? c.phone : '', t);
+        return ownerTopupRow(c ? (c.phone || c.email || '') : '', t);
       }).join('') : '<p class="note-p" style="padding:6px 0">还没有代充记录。</p>';
     });
   }).catch(function(){ box.innerHTML = '<p class="note-p" style="padding:6px 0">暂时读不到代充记录。</p>'; });
@@ -4247,9 +4400,9 @@ var EN_MAP = {
 /* 我的页 */
 '我的预约':'My Bookings','我的钱包':'My Wallet','我的信息':'My Info','我的页面分区':'My page sections','返回预约目录':'\u2190 Back to Booking','← 返回预约目录':'\u2190 Back to Booking','这一页只有你自己的内容：预约、钱包和个人资料，不会出现课程目录。想约新课，点上面的返回按钮或底部「预约」回到目录页。':'Your bookings, wallet, and profile — nothing else. To book a class, head back to Booking.','这里只有你自己的预约、钱包和资料。想约新课，点「预约」回目录页。':'Your bookings, wallet, and profile only. To book a class, tap Booking to return to the catalog.','取消后名额立即释放回对应场次；到店出示预约号即可。':'Cancelling releases the spot back to that session right away; just show your booking code at the studio.','待上的预约':'Upcoming bookings','单待上':' upcoming','你还没有预约。':'You have no bookings yet.','只有你自己下的单会出现在这里，去看看本周的课程和活动吧。':'Only bookings you placed appear here. Go check out this week\u2019s classes and events.','去约一节课':'Book a class','上课记录':'Class history','共':'','次 · 按时间从近到远':' visits · Newest first','还没有上课记录。等你上完第一节课，这里会记下时间、老师和出勤。':'No class history yet. After your first class, the time, teacher and attendance will be recorded here.','我的课件':'My Materials','份 · 来自我约过和上过的课':' files · From classes you booked or attended','约课后这里会出现课件':'Materials will appear here after you book','还没有课件。等你约的课上传了课件，或者上完一节有课件的课，这里就能直接打开。':'No materials yet. Once a class you booked uploads materials — or you finish a class that has them — you can open them right here.','课程课件 · 老师已上传':'Course materials · Uploaded by the teacher','本节课件 · 老师已上传':'This lesson\u2019s materials · Uploaded by the teacher','课程课件':'Course materials','本节课件':'This lesson\u2019s materials','打开':'Open','文件':'File','图片':'Image','文档':'Document',
 /* 钱包 */
-'钱包余额':'Wallet Balance','充值后约课直接扣':'Top up and pay bookings directly','先填好个人资料（姓名 + 手机号），钱包就会按你的手机号归户，可以提前充值，约课时用余额付款。':'Fill in your profile first (name + phone). Your wallet is tied to your phone number, so you can top up in advance and pay for bookings from your balance.','先填资料':'Fill in profile first','约课时选「余额支付」直接扣这里的钱，扣完实时更新；用余额付的预约取消后，钱自动退回这里。':'Choose “Pay with balance” when booking and the money is deducted here, updated in real time. If you cancel a balance-paid booking, the money returns here automatically.','充值':'Top up','最近流水':'Recent activity','还没有充值或消费记录。':'No top-ups or spending yet.','自己充值':'Self top-up','店主代充':'Owner top-up','余额支付':'Pay with balance','取消退款':'Cancellation refund','余额':'Balance','现金':'Cash','线下转账':'Bank transfer','其他方式':'Other','其他':'Other','微信支付':'WeChat Pay','信用卡':'Credit card','借记卡':'Debit card','Stripe · 信用卡':'Stripe · Credit card','Stripe · 微信支付':'Stripe · WeChat Pay',
+'钱包余额':'Wallet Balance','充值后约课直接扣':'Top up and pay bookings directly','先填好个人资料（姓名 + 手机号或邮箱），钱包就会按你的手机号或邮箱归户，可以提前充值，约课时用余额付款。':'Fill in your profile first (name + phone or email). Your wallet is tied to your phone number or email, so you can top up in advance and pay for bookings from your balance.','先填资料':'Fill in profile first','约课时选「余额支付」直接扣这里的钱，扣完实时更新；用余额付的预约取消后，钱自动退回这里。':'Choose “Pay with balance” when booking and the money is deducted here, updated in real time. If you cancel a balance-paid booking, the money returns here automatically.','充值':'Top up','最近流水':'Recent activity','还没有充值或消费记录。':'No top-ups or spending yet.','自己充值':'Self top-up','店主代充':'Owner top-up','余额支付':'Pay with balance','取消退款':'Cancellation refund','余额':'Balance','现金':'Cash','线下转账':'Bank transfer','其他方式':'Other','其他':'Other','微信支付':'WeChat Pay','信用卡':'Credit card','借记卡':'Debit card','Stripe · 信用卡':'Stripe · Credit card','Stripe · 微信支付':'Stripe · WeChat Pay',
 /* 个人资料 / 账号卡 */
-'个人资料':'Profile','按手机号认人':'Identified by phone number','姓名：':'Name: ','手机号：':'Phone: ','填一次就行：以后预约时姓名和手机号会自动带入。你的预约、上课记录和钱包余额都按这个手机号归到你名下。':'Fill it in once: your name and phone will be filled in automatically for future bookings. Your bookings, class history and wallet balance are all tied to this phone number.','ETERN.III 手碟馆会员':'ETERN.III Handpan Studio member','修改资料':'Edit profile','填写资料':'Fill in profile','编辑资料':'Edit profile','待上预约':' upcoming bookings','登录账号':'Login account','身份按 profiles 表里的 role 算：顾客只看自己的，老师看自己教的课，店主看全部。身份只能由店主在店主端改。':'Your role comes from the role field in the profiles table: customers see only their own data, teachers see the classes they teach, and the owner sees everything. Only the owner can change roles, from the owner dashboard.','身份 · ':'Role · ','我是老师 · 老师入口':'I\u2019m a teacher · Teacher entrance','退出登录':'Log out','完善资料，预约自动带入姓名手机号':'Complete your profile so bookings fill in your name & phone automatically',
+'个人资料':'Profile','按手机号或邮箱认人':'Identified by phone or email','姓名：':'Name: ','手机号：':'Phone: ','邮箱：':'Email: ','填一次就行：以后预约时姓名和联系方式会自动带入。你的预约、上课记录和钱包余额都按你的手机号或邮箱归到你名下。':'Fill it in once: your name and contact will be filled in automatically for future bookings. Your bookings, class history and wallet balance are all tied to this phone number or email.','ETERN.III 手碟馆会员':'ETERN.III Handpan Studio member','修改资料':'Edit profile','填写资料':'Fill in profile','编辑资料':'Edit profile','待上预约':' upcoming bookings','登录账号':'Login account','身份按 profiles 表里的 role 算：顾客只看自己的，老师看自己教的课，店主看全部。身份只能由店主在店主端改。':'Your role comes from the role field in the profiles table: customers see only their own data, teachers see the classes they teach, and the owner sees everything. Only the owner can change roles, from the owner dashboard.','身份 · ':'Role · ','我是老师 · 老师入口':'I\u2019m a teacher · Teacher entrance','退出登录':'Log out','完善资料，预约自动带入姓名和联系方式':'Complete your profile so bookings fill in your name & contact automatically',
 /* 预约流程 sheet */
 '选择场次':'Choose a session','选择日期与时段':'Choose date & time','整套课程安排（固定时间）':'Full package schedule (fixed times)','一次报名整套':'Enroll in the full set of ','节，时间固定、每节 focus 已排好；上完一节，上课记录里记一节。':' lessons at once — fixed times, each lesson\u2019s focus already set. Each finished lesson is added to your class history.','人数 / 数量':'People / Quantity','份数':'Sets','每份含全部':'Each set includes all ','最多':'up to ','本场最多可约':'This session allows up to ','联系人信息':'Contact info','姓名':'Name','手机号（用于接收预约通知）':'Phone (for booking notifications)','手机号（约课认人用，第一次填一次）':'Phone (identifies you for bookings — enter once)','手机号还是约课的身份 key：填了它，登录账号就会和按这个手机号下的预约、钱包关联起来。':'Your phone number is still the identity key for bookings: once entered, your login account is linked to the bookings and wallet under that number.','例如：Ada':'e.g. Ada','例如：(206) 555-0100':'e.g. (206) 555-0100','例如：':'e.g. ','付款方式（网页版）':'Payment','付款方式':'Payment method','信用卡 / 借记卡':'Credit / debit card','经 Stripe 安全支付':'Secure payment via Stripe','Safari 与 iPhone 上一键付':'One-tap pay on Safari & iPhone','Chrome 与 Android 上一键付':'One-tap pay on Chrome & Android','当前余额':'Current balance','付款后实时从余额扣减':'Deducted from your balance in real time once you pay','还差':'You still need ','请先去「我的预约」里充值':' — please top up in My Bookings first','提交后先为你占位 15 分钟，付款成功才算约成功；15 分钟内没付完，名额自动释放。同一场次的名额只会被成功扣减一次，不会超卖。':'We hold your spot for 15 minutes. Your booking is confirmed once payment goes through; unpaid holds are released automatically.','合计（USD）':'Total (USD)','合计':'Total','确认预约':'Confirm booking','提交中…':'Submitting…','容量':'Capacity','已满位':'Full','剩':'','位':' left','租用时长':'Rental duration','/ 小时，按时长算总价':'/ hour, priced by duration','日期':'Date','开始时间':'Start time','（已占用）':'(Taken)','这天已被占用的时段（不能选）：':'Times already taken this day (not selectable):','这天还没有课程 / 活动占用，':'No classes / events have taken this day yet — ','内任意整点开始都可以选。':'any on-the-hour start can be selected.','你选的时段：':'Your selected time: ','价格：':'Price: ','这一天按所选时长已没有空档，请换一天或缩短时长':'No slot of that length is left this day — try another day or a shorter duration','减少时长':'Shorter','增加时长':'Longer','减少':'Decrease','增加':'Increase','返回':'Back',
 /* 预约成功 / 取消 */
@@ -4263,7 +4416,7 @@ var EN_MAP = {
 /* 店主端锁定 / 重验 */
 '店主端已锁定':'Owner Dashboard Locked','你刚才已退出店主端并锁定。当前登录账号是':'You just exited and locked the owner dashboard. The current account is ','（店主），重新进入店主端前，要再输一次这个账号的密码验证身份——锁定后点「管理」tab 不会直接放行。':' (owner). Before re-entering, enter this account\u2019s password once more to verify it\u2019s you — after locking, tapping the “Manage” tab will not let you straight in.','店主账号密码':'Owner account password','输入当前账号的密码':'Enter the current account\u2019s password','请输入密码。':'Please enter your password.','验证并进入店主端':'Verify & enter owner dashboard','验证中…':'Verifying…','取消（保持锁定）':'Cancel (stay locked)','密码不对，店主端保持锁定。':'Wrong password — the owner dashboard stays locked.','验证没通过，请重新输入密码':'Verification failed — please re-enter your password','验证失败':'Verification failed','这个账号现在的身份不是店主，进不了店主端。':'This account\u2019s role is no longer owner, so it can\u2019t enter the owner dashboard.','现在没连上数据库，没法验证密码，店主端保持锁定。连上后再试。':'The database isn\u2019t connected right now, so the password can\u2019t be verified and the owner dashboard stays locked. Try again once connected.','验证通过，已重新进入店主端':'Verified — welcome back to the owner dashboard','已退出店主端并锁定。再进店主端要点「管理」tab 并重新输密码验证。':'Exited and locked the owner dashboard. To re-enter, tap the “Manage” tab and verify with your password again.','退出店主端并锁定':'Exit & lock owner dashboard',
 /* 个人资料 sheet */
-'填一次就行：以后预约时姓名和手机号会自动带入，不用每次重填。手机号是认人的关键，你的预约、上课记录和钱包余额都会按这个手机号归到你名下。':'Fill it in once: your name and phone will be filled in automatically for future bookings. Your phone number is the identity key — your bookings, class history and wallet balance are all filed under it.','保存资料':'Save profile','资料已保存，预约时会自动带入':'Profile saved — it will be filled in automatically when you book','请填写姓名':'Please enter your name','请填写手机号，这是认人的关键':'Please enter your phone number — it\u2019s the identity key',
+'填一次就行：以后预约时姓名和联系方式会自动带入，不用每次重填。手机号或邮箱是认人的关键（至少填一个），你的预约、上课记录和钱包余额都会按它归到你名下。':'Fill it in once: your name and contact will be filled in automatically for future bookings. Your phone number or email is the identity key (at least one is required) — your bookings, class history and wallet balance are all filed under it.','保存资料':'Save profile','资料已保存，预约时会自动带入':'Profile saved — it will be filled in automatically when you book','请填写姓名':'Please enter your name','请填写手机号，这是认人的关键':'Please enter your phone number — it\u2019s the identity key','手机号和邮箱至少填一个，这是认人的关键':'Enter a phone number or an email — at least one is required; it\u2019s the identity key','请填正确的邮箱':'Please enter a valid email',
 /* 场次编辑 sheet */
 '编辑这一节课':'Edit This Lesson','本节 focus（这节课的重点）':'This lesson\u2019s focus','如：双手配合与律动':'e.g. Two-hand coordination & groove','本节介绍（要讲什么）':'About this lesson (what it covers)','这节课会讲什么、练什么，报了这节课的学员会看到':'What this lesson will teach and practise — students booked into it will see this','本节课件':'This lesson\u2019s materials','＋ 上传新课件':'+ Upload new material','保存这一节':'Save this lesson','课件已挂到这一节，学员那边就能看到':'Material attached to this lesson — students can see it now','课件已替换成新文件':'Material replaced with the new file','课件已从这一节删除':'Material removed from this lesson','这一节的内容已更新，学员看到的就是新内容和新课件':'This lesson has been updated — students now see the new content and materials','这一节还没有课件。上传后，报了这节课的学员能在自己的预约和上课记录里打开。':'This lesson has no materials yet. After uploading, students booked into it can open them from their bookings and class history.','替换':'Replace','删除':'Delete',
 /* 店主端通用 */
@@ -4281,7 +4434,7 @@ var EN_MAP = {
 /* 管理分类分组 + 团课灵活排课 + 单节改时间 */
 '其他':'Other','这个分类下还没有项目，用下面的「上架新项目」或「上架团课」表单添加，选对分类就会出现在这里。':'Nothing in this category yet. Add it with the "New Item" or "New Package" form below — pick the right category and it will appear here.','每周上课日（点选，可多选）':'Class days each week (tap to select, multiple allowed)','每周上课日':'Class days each week','第一节日期（从这天起，顺延到选中的上课日）':'First lesson date (rolls forward to the next selected class day)','每节开始时间':'Start time per lesson','全部场次（生成后逐节调时间）':'All lessons (adjust each one after generating)','生成场次 · 逐节调时间':'Generate lessons · adjust each time','生成场次':'Generate lessons','先选好每周上课日、第一节日期和开始时间，点上面的按钮生成全部场次；生成后每一节的日期、开始和结束时间、focus 都能单独改，改完再点「上架团课」发布。':'Pick the weekly class days, the first lesson date and the start time, then tap the button above to generate all lessons. Afterwards, each lesson\u2019s date, start and end time and focus can be changed individually — then tap "List package" to publish.','下面每一节都能单独改：日期、开始 / 结束时间、focus 改完直接点「上架团课」发布。':'Each lesson below can be adjusted on its own — date, start / end time and focus — then tap "List package" to publish.','这一节的重点（可留空）':'This lesson\u2019s focus (optional)','本节 focus':'This lesson\u2019s focus','本节日期':'Lesson date','结束时间':'End time','请先选每周上课日（至少一天）':'Please pick at least one weekly class day first','请先选每周上课日（至少一天），再生成场次':'Please pick at least one weekly class day, then generate the lessons','请先选第一节日期和开始时间':'Please pick the first lesson date and start time first','已生成':'Generated ','节场次：每一节的日期和时间都能单独改，确认后点「上架团课」发布':' lessons generated: each lesson\u2019s date and time can be adjusted individually — tap "List package" to publish when ready','请选这一节的日期':'Please pick a date for this lesson','时间不对：结束时间要晚于开始时间':'Invalid time: the end time must be after the start time','这一节已更新：日期时间、内容和课件都已保存，学员看到的就是新的':'This lesson has been updated: date & time, content and materials are saved — students now see the new version','系统团课：时间已排好、循序渐进，一次报名整套课程。':'A systematic package: all dates and times scheduled, progressing step by step — enroll in the full set at once.',
 /* 客户充值（店主） */
-'客人线下把钱给你（比如现金或转账收到 $200）之后，在这里按手机号找到 TA、输金额充值，钱立刻进 TA 的钱包余额，TA 在自己那边马上能看到。每一笔代充都会写进流水：谁充的、给谁充、多少钱、什么时候、怎么收的钱。':'When a guest pays you offline, find them by phone number and enter the amount. Their balance updates instantly, and every top-up is logged: who, whom, how much, when, and how it was paid.','给客户充值':'Top Up','客户手机号':'Customer phone','输入客户手机号查找':'Enter the customer\u2019s phone to search','查找客户':'Find customer','先输入客户手机号':'Enter the customer\u2019s phone first','没找到这个手机号的客户。确认号码无误后，可以直接给 TA 建档并充值（建档只记手机号和下面这笔充值）：':'No customer found with this phone number. Once you\u2019ve confirmed the number, you can create their file and top up directly (the file records only the phone number and this top-up):','客户：':'Customer: ','当前钱包余额':'Current wallet balance ','单有效预约':' active bookings','充值金额（USD $）':'Top-up amount (USD $)','如：200':'e.g. 200','你是怎么收到这笔钱的':'How did you receive this money?','确认充值到 TA 的钱包':'Confirm top-up to their wallet','请输入充值金额':'Please enter the top-up amount','已给':'Topped up ','充值':' by ','），TA 那边立刻能看到':' — they can see it right away','充值没成功，请稍后再试':'Top-up failed — please try again later','查找没成功，请稍后再试':'Search failed — please try again later','最近店主代充记录':'Recent owner top-ups','还没有代充记录。':'No owner top-ups yet.','暂时读不到代充记录。':'Owner top-up records can\u2019t be read right now.','店主代充 · ':'Owner top-up · ','收款':' received','充后余额':'Balance after ',
+'客人线下把钱给你（比如现金或转账收到 $200）之后，在这里按手机号或邮箱找到 TA、输金额充值，钱立刻进 TA 的钱包余额，TA 在自己那边马上能看到。每一笔代充都会写进流水：谁充的、给谁充、多少钱、什么时候、怎么收的钱。':'When a guest pays you offline, find them by phone number or email and enter the amount. Their balance updates instantly, and every top-up is logged: who, whom, how much, when, and how it was paid.','给客户充值':'Top Up','客户手机号或邮箱':'Customer phone or email','输入客户手机号或邮箱查找':'Enter the customer\u2019s phone or email to search','查找客户':'Find customer','先输入客户手机号或邮箱':'Enter the customer\u2019s phone or email first','先查找客户，核对无误再充值':'Find the customer first and double-check before topping up','确认用手机号：':'Confirm by phone: ','确认用邮箱：':'Confirm by email: ','会员编号':'Member ID','通知':'Notifications','都看过了':'All read','点一条通知就会标为已读。':'Tap a notification to mark it as read.','充值到账':'Top-up received','客户：':'Customer: ','当前钱包余额':'Current wallet balance ','单有效预约':' active bookings','充值金额（USD $）':'Top-up amount (USD $)','如：200':'e.g. 200','你是怎么收到这笔钱的':'How did you receive this money?','确认充值到 TA 的钱包':'Confirm top-up to their wallet','请输入充值金额':'Please enter the top-up amount','已给':'Topped up ','充值':' by ','），TA 那边立刻能看到':' — they can see it right away','充值没成功，请稍后再试':'Top-up failed — please try again later','查找没成功，请稍后再试':'Search failed — please try again later','最近店主代充记录':'Recent owner top-ups','还没有代充记录。':'No owner top-ups yet.','暂时读不到代充记录。':'Owner top-up records can\u2019t be read right now.','店主代充 · ':'Owner top-up · ','收款':' received','充后余额':'Balance after ',
 /* 账号权限 */
 '新用户注册后默认是顾客。只有店主能在这里把账号改成老师或店主：选身份、填老师对应的名字（老师登录后按这个名字只看自己教的课）、填手机号（约课按手机号认人，登录账号靠它关联自己的预约）。普通用户改不了自己的身份。':'New users start as customers. Only the owner can change an account into a teacher or owner here: pick the role, enter the teacher\u2019s matching name (teachers then see only the classes under that name), and enter the phone number (bookings identify people by phone, and the login account links to its bookings through it). Regular users can\u2019t change their own role.','全部账号 · 身份设置':'Accounts & Roles','正在读取账号列表…':'Loading accounts…','暂时没连上数据库，账号列表读不到。连上后这里会列出 profiles 里的全部账号，店主在这里改身份。':'The database isn\u2019t connected, so the account list can\u2019t be read. Once connected, every account in profiles will be listed here for the owner to manage roles.','profiles 里还没有账号。新用户注册后会自动出现在这里（默认顾客）。第一个店主账号需要先注册，再由有权限的人把 role 改成 admin。':'There are no accounts in profiles yet. New sign-ups appear here automatically (as customers). The first owner account must sign up first, then someone with permission sets its role to admin.','说明：网页版用邮箱 + 密码登录（Supabase Auth）。手机号短信验证码登录以后接短信服务商再加；小程序用微信登录认 openid，身份同样在这张 profiles 表里。':'Note: the web version logs in with email + password (Supabase Auth). SMS code login will be added once an SMS provider is connected; the mini program uses WeChat login (openid), and roles live in this same profiles table.','手机号（约课认人）':'Phone (booking identity)','老师名字（身份是老师时填，要和课程上的老师名字一字不差）':'Teacher name (for teachers — must match the name on their courses exactly)','如：林老师':'e.g. Teacher Lin','保存身份':'Save role','身份是老师时，要填老师名字，TA 登录后才能认出自己教的课':'For a teacher role, enter the teacher name so they can see their own classes after logging in','身份已保存：':'Role saved: ',' 现在是':' is now ','保存没成功：数据库还没给 profiles 表开放写入权限，要先在库里给这张表补授权才能改身份。你的店主身份本身没问题。':'Save failed: the database hasn\u2019t granted write access to the profiles table yet — that grant has to be added in the database before roles can be changed. Your own owner role is fine.','全部账号列表暂时读不到：数据库还没给 profiles 表开放读取权限，登录账号直查这张表会被拒绝，所以其他账号暂时列不出来、身份也暂时改不了。需要在数据库里给 profiles 表补授权（GRANT SELECT, UPDATE ON public.profiles TO authenticated，并加一条店主可读全部账号的策略），补好后这里会自动恢复成完整列表。这不影响你已经通过 current_role() 验证的店主身份，店主端其他功能都正常。':'The full account list can\u2019t be read yet: the database hasn\u2019t granted read access to the profiles table, so direct queries from logged-in accounts are refused — other accounts can\u2019t be listed or re-roled for now. A grant needs to be added in the database (GRANT SELECT, UPDATE ON public.profiles TO authenticated, plus a policy letting the owner read all accounts); once added, this page returns to the full list automatically. This doesn\u2019t affect your owner role, which was verified via current_role() — everything else in the owner dashboard works.','身份：':'Role: ',' · 老师名字：':' · Teacher name: ',' · 手机号：':' · Phone: ',' · 手机号还没绑定':' · Phone not linked yet',
 /* 老师工作台 */
@@ -4324,6 +4477,12 @@ Object.assign(EN_MAP, {
 '定制':"tailored",
 ' 起 · 每周同一时间':' · Same time every week',
 '（':' (','）':')'
+});
+/* 充值身份（手机号或邮箱）+ 通知相关碎片 */
+Object.assign(EN_MAP, {
+'没找到这个':'No customer found with this ','的客户。确认无误后，可以直接给 TA 建档并充值（建档只记这个':'. Once you\u2019ve confirmed it, you can create their file and top up directly (the file records only this ','和下面这笔充值）：':' and this top-up):','手机号':'phone number',
+'已到账':' received','条未读':' unread','未读':'unread',
+'先填姓名，再填手机号或邮箱，钱包按手机号或邮箱认人':'Enter your name plus a phone number or email first — the wallet is tied to your phone or email'
 });
 var EN_KEYS = Object.keys(EN_MAP).sort(function(a,b){ return b.length - a.length; });
 var EN_PATTERNS = [
