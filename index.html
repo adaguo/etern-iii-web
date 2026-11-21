@@ -326,6 +326,16 @@ img{ display:block; max-width:100%; }
 .rec-row .rm small{ font-size:11px; color:var(--ink2); display:block; }
 .rec-row .rn{ text-align:right; flex:none; }
 .rec-row .rn b{ color:var(--brass); font-size:13.5px; display:block; }
+/* 待确认 · 到店付款按场次分组：组头一行（课程名 · 日期含星期 · 开始–结束 · 老师名），组下面列这节课的待确认单 */
+.pgh{ padding:11px 15px 2px; font-size:13px; font-weight:900; line-height:1.55; color:var(--ink); }
+.pgh.flat{ padding-left:0; padding-right:0; }
+/* 今日已确认记录：默认收起的折叠头，店主名单卡和老师工作台卡共用 */
+.log-toggle{ width:100%; display:flex; align-items:center; gap:8px; padding:12px 15px; text-align:left; color:var(--ink); background:none; }
+.log-toggle b{ font-size:13.5px; }
+.log-toggle .cnt{ font-size:11.5px; color:var(--ink2); font-weight:700; }
+.log-toggle .chev{ margin-left:auto; flex:none; width:15px; height:15px; stroke:var(--brass); fill:none; stroke-width:2.2; stroke-linecap:round; stroke-linejoin:round; transform:rotate(-90deg); transition:transform .2s; }
+.log-toggle[aria-expanded="true"] .chev{ transform:rotate(0deg); }
+.mgmt .log-toggle{ padding:2px 0 8px; }
 
 /* owner tabs (segmented, prototype roleswitch language) */
 .atabs-wrap{ padding:16px 18px 2px; }
@@ -2258,7 +2268,7 @@ function findItem(id){ return items.find(function(x){return x.id===id;}); }
 function findSess(item, sid){ return item.sessions.find(function(s){return s.id===sid;}); }
 function remain(s){ return s.total - s.booked; }
 var toastTimer = null;
-function toast(msg){ var t=$('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toastTimer); toastTimer=setTimeout(function(){t.classList.remove('show');},2400); }
+function toast(msg, ms){ var t=$('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toastTimer); toastTimer=setTimeout(function(){t.classList.remove('show');}, ms || 2400); }
 /* 失败排障用：把服务器返回的真实错误原样拼出来（错误码 + 消息 + details/hint），
    附在通用文案后面。通用文案照常走双语翻译，这段错误原文不翻译。 */
 function errText(e){
@@ -3016,8 +3026,10 @@ function bookViaDB(it, pay, total){
       });
   }).then(function(ctx){
     /* 到店付款不直接确认：只把付款方式标成 store，pay_status 保持未付，单子先进「待确认」
-       （占着名额），等老师 / 馆主在待确认列表里核对已收款再确认（确认时才置 paid）。 */
-    var patch = isStore ? { pay_method: 'store' } : { pay_status: 'paid', pay_method: 'stripe', status: 'confirmed' };
+       （占着名额），等老师 / 馆主在待确认列表里核对已收款再确认（确认时才置 paid）。
+       同时把 book_session 给待付单设的 15 分钟 hold_expires_at 清成 NULL：待确认单
+       可能几小时后才被确认，绝不能按待付单的过期时间被释放。 */
+    var patch = isStore ? { pay_method: 'store', hold_expires_at: null } : { pay_status: 'paid', pay_method: 'stripe', status: 'confirmed' };
     return sbReq('bookings?booking_code=eq.' + encodeURIComponent(code), { method: 'PATCH', body: patch }).catch(function(){})
       .then(function(){ return findBooked(ctx); });
   });
@@ -3065,7 +3077,8 @@ function bookPackageDB(it, pay, total){
   return chain.then(function(){
     var payChain = isBalance ? walletAdjust(totalCents, 'spend', null, '余额支付 · ' + it.name + ' ' + code) : Promise.resolve();
     return payChain.then(function(){
-      var patch = isBalance ? { pay_status: 'paid', pay_method: 'balance', status: 'confirmed' } : isStore ? { pay_method: 'store' } : { pay_status: 'paid', pay_method: 'stripe', status: 'confirmed' };
+      /* 到店付款同样清掉 15 分钟 hold_expires_at（见单节课路径说明）：待确认不设过期 */
+      var patch = isBalance ? { pay_status: 'paid', pay_method: 'balance', status: 'confirmed' } : isStore ? { pay_method: 'store', hold_expires_at: null } : { pay_status: 'paid', pay_method: 'stripe', status: 'confirmed' };
       var pc = Promise.resolve();
       createdIds.forEach(function(id){ pc = pc.then(function(){ return sbReq('bookings?id=eq.' + id, { method: 'PATCH', body: patch }).catch(function(){}); }); });
       return pc;
@@ -3204,29 +3217,162 @@ function storeTargets(code){
   });
   return out;
 }
+/* 待确认按场次分组：一个场次一组，组头是「课程名 · 日期（含星期） 开始–结束 · 老师名」，
+   组下面再列这节课里待确认的每一单，不再按预订单平铺。
+   团课的一次报名在每个场次各有一行：金额按整套算，确认 / 拒绝仍整套一起处理。 */
+function storePendingSessionGroups(list){
+  var pend = storePendingOf(list);
+  var pkgSum = {}, pkgCnt = {};
+  pend.forEach(function(b){ if(b.pkg){ pkgSum[b.pkg] = (pkgSum[b.pkg] || 0) + b.total; pkgCnt[b.pkg] = (pkgCnt[b.pkg] || 0) + 1; } });
+  var byKey = {}, out = [];
+  pend.forEach(function(b){
+    var key = b.sessId ? 's:' + b.sessId : (b.startsAt ? 't:' + b.startsAt.getTime() : 'c:' + b.code);
+    var g = byKey[key];
+    if(!g){
+      var it = findItem(b.itemId); var s = it ? findSess(it, b.sessId) : null;
+      g = { key: key, it: it, s: s, rep: b, rows: [] };
+      byKey[key] = g; out.push(g);
+    }
+    var it2 = findItem(b.itemId);
+    g.rows.push({ b: b, total: b.pkg ? pkgSum[b.pkg] : b.total,
+      note: b.pkg ? ('团课整套 · 共 ' + pkgCnt[b.pkg] + ' 节') : (b.hours ? '租用 ' + b.hours + ' 小时' : b.qty + ' ' + (it2 ? it2.unit : '人')) });
+  });
+  out.sort(function(a, b){
+    var da = a.s ? a.s.date : a.rep.startsAt, db = b.s ? b.s.date : b.rep.startsAt;
+    if(da && db && (da - db)) return da - db;
+    var ta = a.s ? a.s.time : '', tb = b.s ? b.s.time : '';
+    return ta < tb ? -1 : ta > tb ? 1 : 0;
+  });
+  return out;
+}
+/* 待确认的「单」数：团课整套算一单 */
+function storePendingOrderCount(list){
+  var seen = {}, n = 0;
+  storePendingOf(list).forEach(function(b){ var k = b.pkg || b.code; if(!seen[k]){ seen[k] = 1; n++; } });
+  return n;
+}
+/* 场次组头文案：课程名 · 11月21日周六 13:00–14:00 · 林老师（场地没有老师，不带最后一段） */
+function sessGroupTitle(it, s, b){
+  var parts = [];
+  if(it) parts.push(it.name);
+  if(s) parts.push(fmtDate(s.date) + ' ' + s.time);
+  else if(b && b.startsAt) parts.push(fmtDate(b.startsAt));
+  if(it && it.teacher && it.cat !== 'venue') parts.push(it.teacher);
+  return parts.join(' · ');
+}
+/* 一单待确认的反馈信息：完整组头（进记录用）+ 短信息（弹反馈用，如「手碟体验课 11/21 13:00」）+ 顾客 + 金额（多数据源副本按预约号去重） */
+function storeActionInfo(code){
+  var targets = storeTargets(code); if(!targets.length) return null;
+  var rep = targets[0];
+  var it = findItem(rep.itemId); var s = it ? findSess(it, rep.sessId) : null;
+  var seen = {}, amount = 0, n = 0;
+  targets.forEach(function(b){ if(seen[b.code]) return; seen[b.code] = 1; amount += b.total; n++; });
+  var d = s ? s.date : rep.startsAt;
+  var start = s ? String(s.time || '').split('–')[0] : (d ? fmtMin(d.getHours() * 60 + d.getMinutes()) : '');
+  var short = (it ? it.name : '') + (n > 1 ? ' · 共 ' + n + ' 节' : (d ? ' ' + (d.getMonth() + 1) + '/' + d.getDate() + ' ' + start : ''));
+  return { rep: rep, title: sessGroupTitle(it, s, rep), short: short, cust: rep.name || '学员', amount: amount, count: n };
+}
+function storePendingRowHtml(row, flat){
+  var b = row.b;
+  return '<div class="person"' + (flat ? ' style="padding-left:0;padding-right:0"' : '') + '><span class="pa hold">' + initial(b.name) + '</span>' +
+    '<span class="pm"><b>' + esc(b.name || '学员') + '</b><small>' + esc(b.phone || '') + ' · ' + esc(row.note) + ' · 预约号 ' + esc(b.code) + '</small></span>' +
+    '<span class="pn">' + money(row.total) + '<small>到店付款</small></span>' +
+    '<button class="attbtn on-att" onclick="confirmStoreBooking(\'' + b.code + '\')">确认</button>' +
+    '<button class="attbtn" onclick="rejectStoreBooking(\'' + b.code + '\')">拒绝</button></div>';
+}
+function storePendingGroupsHtml(groups, flat){
+  return groups.map(function(g){
+    return '<div class="pgh' + (flat ? ' flat' : '') + '">' + esc(sessGroupTitle(g.it, g.s, g.rep)) + '</div>' +
+      g.rows.map(function(r){ return storePendingRowHtml(r, flat); }).join('');
+  }).join('');
+}
+/* ---------------- 今日已确认 / 已拒绝记录 ----------------
+   确认 / 拒绝后单子不凭空消失：确认过的单本身在该节课名单里一直显示「已付」，
+   这里再留一条当天记录（场次、顾客、金额、处理时间、确认人），默认收起。
+   记录存本机（和登录会话、目录缓存一样用 localStorage），只保留今天的；
+   老师端只看自己课的记录。 */
+var STORE_LOG_KEY = 'etern-store-log-v1';
+var storeLogOpen = false;
+var storeLog = (function(){
+  try{
+    var arr = JSON.parse(localStorage.getItem(STORE_LOG_KEY) || '[]');
+    var t0 = new Date(); t0.setHours(0, 0, 0, 0);
+    return (arr || []).filter(function(e){ return e && e.ts >= t0.getTime(); });
+  }catch(e){ return []; }
+})();
+function storeLogEntries(onlyTeacher){
+  var t0 = new Date(); t0.setHours(0, 0, 0, 0);
+  return storeLog.filter(function(e){
+    if(!e || e.ts < t0.getTime()) return false;
+    if(!onlyTeacher || !e.itemId) return true;
+    var it = findItem(e.itemId);
+    return !!it && it.teacher === onlyTeacher;
+  });
+}
+function pushStoreLog(entry){
+  storeLog.unshift(entry);
+  try{ localStorage.setItem(STORE_LOG_KEY, JSON.stringify(storeLog.slice(0, 80))); }catch(e){}
+}
+function storeActorName(){
+  if(typeof currentRole === 'function' && currentRole() === 'teacher') return teacherName || '老师';
+  return '店主';
+}
+function toggleStoreLog(){ storeLogOpen = !storeLogOpen; renderRoster(); renderTeacher(); }
+function storeLogInnerHtml(flat, onlyTeacher){
+  var entries = storeLogEntries(onlyTeacher);
+  var head = '<button type="button" class="log-toggle" onclick="toggleStoreLog()" aria-expanded="' + (storeLogOpen ? 'true' : 'false') + '">' +
+    '<b>今日已确认</b><span class="cnt">（' + entries.length + '）</span>' +
+    '<svg class="chev" viewBox="0 0 24 24"><path d="M5 9l7 7 7-7"/></svg></button>';
+  if(!storeLogOpen) return head;
+  return head + entries.map(function(e){
+    var t = new Date(e.ts);
+    var hm = fmtMin(t.getHours() * 60 + t.getMinutes());
+    return '<div class="person"' + (flat ? ' style="padding-left:0;padding-right:0"' : '') + '><span class="pm"><b>' + esc(e.cust) + '</b><small>' + esc(e.title) + '<br />' + hm + ' · ' + (e.act === 'confirm' ? '确认人：' : '拒绝人：') + esc(e.actor) + '</small></span>' +
+      '<span class="pn">' + money(e.amount) + '<small>' + (e.act === 'confirm' ? '已确认 · 已收款' : '已拒绝 · 名额已释放') + '</small></span></div>';
+  }).join('');
+}
 function confirmStoreBooking(code){
   var targets = storeTargets(code); if(!targets.length) return;
-  targets.forEach(function(b){ b.status = 'paid'; });
-  if(dbMode){
-    var ids = {};
-    targets.forEach(function(b){ if(b.dbId) ids[b.dbId] = 1; });
-    Object.keys(ids).forEach(function(id){
-      dbFire(sbReq('bookings?id=eq.' + encodeURIComponent(id), { method: 'PATCH', body: { pay_status: 'paid', pay_method: 'store', status: 'confirmed' } }));
-    });
-    var pkgKey = targets[0].pkg;
-    if(pkgKey) dbFire(sbReq('package_enrollments?enrollment_code=eq.' + encodeURIComponent(pkgKey), { method: 'PATCH', body: { pay_status: 'paid', status: 'confirmed' } }).catch(function(){}));
+  var info = storeActionInfo(code);
+  /* 只有确认真正落库后才走这里：改本地状态、写「今日已确认」记录、弹成功反馈 */
+  function finish(){
+    targets.forEach(function(b){ b.status = 'paid'; });
+    if(info) pushStoreLog({ ts: Date.now(), act: 'confirm', title: info.title, cust: info.cust, amount: info.amount, actor: storeActorName(), code: code, itemId: info.rep.itemId });
+    deriveHistory();
+    renderCards(); renderMy(); renderAdmin(); renderTeacher();
+    toast(info ? ('已确认 · ' + info.short + ' · ' + info.cust + ' · ' + money(info.amount) + ' 已收款') : '已确认收款：这单正式生效，记为已付（到店付款）', 4600);
   }
-  deriveHistory();
-  renderCards(); renderMy(); renderAdmin(); renderTeacher();
-  toast('已确认收款：这单正式生效，记为已付（到店付款）');
+  if(dbMode){
+    /* 确认必须走数据库函数 confirm_store_booking：bookings 的更新权限只允许预约
+       本人或店主，老师直接 PATCH 别人的预约会被数据库拒掉——旧写法用 dbFire
+       吞掉错误、页面却照样显示成功，库里其实还是 pending_payment 未付。
+       函数只允许店主或该节课的老师调用，调用后整单（含团课整套）置为
+       confirmed / 已付。函数失败时只弹错误：本地状态不动、不写记录，
+       待确认项原样留在列表里，绝不假成功。 */
+    var rep = null;
+    for(var i = 0; i < targets.length; i++){ if(targets[i].dbId){ rep = targets[i]; break; } }
+    if(!rep){ toast('确认失败，请重试', 3600); return; }
+    toast('正在确认…');
+    var pkgKey = targets[0].pkg;
+    sbRpc('confirm_store_booking', { p_booking_id: rep.dbId })
+      .then(function(){
+        if(pkgKey) return sbReq('package_enrollments?enrollment_code=eq.' + encodeURIComponent(pkgKey), { method: 'PATCH', body: { pay_status: 'paid', status: 'confirmed' } }).catch(function(){});
+      })
+      .then(function(){ return refreshDynamic(); })
+      .then(finish, function(){ toast('确认失败，请重试', 3600); });
+    return;
+  }
+  finish();
 }
 function rejectStoreBooking(code){
   var targets = storeTargets(code); if(!targets.length) return;
   var first = targets[0];
+  var info = storeActionInfo(code);
   function finish(){
+    if(info) pushStoreLog({ ts: Date.now(), act: 'reject', title: info.title, cust: info.cust, amount: info.amount, actor: storeActorName(), code: code, itemId: info.rep.itemId });
     deriveHistory();
     renderCards(); renderMy(); renderAdmin(); renderTeacher();
-    toast('已拒绝，这单的名额已释放');
+    toast(info ? ('已拒绝 · ' + info.short + ' · ' + info.cust + ' · 名额已释放') : '已拒绝，这单的名额已释放', 4600);
   }
   if(dbMode && first.dbId){
     /* 拒绝 = 走现成的 cancel_booking（释放名额同事务完成；到店付款没扣过余额，不涉及退款） */
@@ -4108,21 +4254,20 @@ function renderRoster(){
   if(!groups.length){ box.innerHTML = '<div class="empty"><p>没有符合条件的场次。</p></div>'; return; }
   var defaultOpenId = firstBookedSessId();
   box.innerHTML = '';
-  /* 待确认 · 到店付款置顶：有空时逐单核对——确认 = 已收款、正式生效并记为已付；拒绝 = 释放名额。不用实时处理。 */
-  var pendG = storePendingGroups(bkAll());
-  if(pendG.length){
+  /* 待确认 · 到店付款置顶，按场次分组：组头是课程名 + 日期（含星期）+ 开始–结束 + 老师名，
+     组下面列这节课待确认的每一单。有空时逐单核对——确认 = 已收款、正式生效并记为已付；拒绝 = 释放名额。不用实时处理。 */
+  var pendSG = storePendingSessionGroups(bkAll());
+  if(pendSG.length){
     var pc = document.createElement('div'); pc.className = 'roster-group';
-    pc.innerHTML = '<div class="gh"><b>待确认 · 到店付款</b><span class="gs"><span>' + pendG.length + ' 单待确认 · 核对已收款就确认，没收到就拒绝</span></span></div>' +
-      pendG.map(function(g){
-        var b = g.rep; var it2 = findItem(b.itemId); var s2 = it2 ? findSess(it2, b.sessId) : null;
-        var when = s2 ? fmtDate(s2.date) + ' ' + esc(s2.time) : (b.startsAt ? fmtDate(b.startsAt) : '');
-        return '<div class="person"><span class="pa hold">' + initial(b.name) + '</span>' +
-          '<span class="pm"><b>' + esc(b.name || '学员') + '</b><small>' + esc(b.phone || '') + ' · ' + (it2 ? esc(it2.name) : '') + (g.count > 1 ? ' · 共 ' + g.count + ' 节' : ' · ' + when) + ' · 预约号 ' + esc(b.code) + '</small></span>' +
-          '<span class="pn">' + money(g.total) + '<small>到店付款</small></span>' +
-          '<button class="attbtn on-att" onclick="confirmStoreBooking(\'' + b.code + '\')">确认</button>' +
-          '<button class="attbtn" onclick="rejectStoreBooking(\'' + b.code + '\')">拒绝</button></div>';
-      }).join('');
+    pc.innerHTML = '<div class="gh"><b>待确认 · 到店付款</b><span class="gs"><span>' + storePendingOrderCount(bkAll()) + ' 单待确认 · 核对已收款就确认，没收到就拒绝</span></span></div>' +
+      storePendingGroupsHtml(pendSG, false);
     box.appendChild(pc);
+  }
+  /* 今日已确认：今天确认 / 拒绝过的到店付款留一条记录（默认收起），处理完不凭空消失 */
+  if(storeLogEntries(null).length){
+    var lg = document.createElement('div'); lg.className = 'roster-group';
+    lg.innerHTML = storeLogInnerHtml(false, null);
+    box.appendChild(lg);
   }
   groups.forEach(function(g){
     var list = sessBookings(g.it.id, g.s.id);
@@ -4500,22 +4645,23 @@ function renderTeacher(){
     box.innerHTML = '<div class="empty"><p>暂时没有挂在你名下的课程。店主在管理页把课程的老师设为你的名字后，这里就会出现。</p></div>';
     return;
   }
-  /* 待确认 · 到店付款：置顶一张列表卡，有空时逐单核对——确认 = 已收款、正式生效；拒绝 = 释放名额。
+  /* 待确认 · 到店付款：置顶一张列表卡，按场次分组——组头是课程名 + 日期（含星期）+ 开始–结束 + 老师名，
+     组下面列这节课待确认的每一单。有空时逐单核对——确认 = 已收款、正式生效；拒绝 = 释放名额。
      不用实时处理，就放在工作台最上面等着。 */
   var tsrc = dbMode ? teacherBookings : bookings;
-  var pendGroups = storePendingGroups(tsrc.filter(function(b){ var pit = findItem(b.itemId); return pit && pit.teacher === teacherName; }));
-  if(pendGroups.length){
+  var tPend = tsrc.filter(function(b){ var pit = findItem(b.itemId); return pit && pit.teacher === teacherName; });
+  var pendSG = storePendingSessionGroups(tPend);
+  if(pendSG.length){
     var pcard = document.createElement('div'); pcard.className = 'mgmt';
-    pcard.innerHTML = '<div class="mh"><div><h4>待确认 · 到店付款</h4><div class="mmeta">' + pendGroups.length + ' 单待确认 · 核对已收款就确认，没收到就拒绝</div></div></div>' +
-      pendGroups.map(function(g){
-        var b = g.rep; var it2 = findItem(b.itemId); var s2 = it2 ? findSess(it2, b.sessId) : null;
-        var when = s2 ? fmtDate(s2.date) + ' ' + esc(s2.time) : (b.startsAt ? fmtDate(b.startsAt) : '');
-        return '<div class="person" style="padding-left:0;padding-right:0"><span class="pa hold">' + initial(b.name) + '</span>' +
-          '<span class="pm"><b>' + esc(b.name || '学员') + '</b><small>' + esc(b.phone || '') + ' · ' + (it2 ? esc(it2.name) : '') + (g.count > 1 ? ' · 共 ' + g.count + ' 节' : ' · ' + when) + ' · ' + money(g.total) + '</small></span>' +
-          '<button class="attbtn on-att" onclick="confirmStoreBooking(\'' + b.code + '\')">确认</button>' +
-          '<button class="attbtn" onclick="rejectStoreBooking(\'' + b.code + '\')">拒绝</button></div>';
-      }).join('');
+    pcard.innerHTML = '<div class="mh"><div><h4>待确认 · 到店付款</h4><div class="mmeta">' + storePendingOrderCount(tPend) + ' 单待确认 · 核对已收款就确认，没收到就拒绝</div></div></div>' +
+      storePendingGroupsHtml(pendSG, true);
     box.appendChild(pcard);
+  }
+  /* 今日已确认：今天确认 / 拒绝过的（只算自己课的）留一条记录，默认收起，处理完不凭空消失 */
+  if(storeLogEntries(teacherName).length){
+    var tlg = document.createElement('div'); tlg.className = 'mgmt';
+    tlg.innerHTML = storeLogInnerHtml(true, teacherName);
+    box.appendChild(tlg);
   }
   mine.forEach(function(it){
     var card = document.createElement('div'); card.className = 'mgmt';
@@ -4872,7 +5018,7 @@ Object.assign(EN_MAP, {
 '已提交 · 待确认':'Submitted · Awaiting confirmation',
 '到店付款预约已提交，名额先为你保留。等老师或馆主确认已收款后，这单才会正式生效；确认前不用再付任何费用。':'Your pay-at-studio booking is submitted and your spot is held. It takes effect once the teacher or owner confirms the payment — nothing more to pay before then.',
 '已确认收款：这单正式生效，记为已付（到店付款）':'Payment confirmed — this booking is now in effect and marked paid (pay at studio)',
-'已拒绝，这单的名额已释放':'Declined — the spot has been released','正在拒绝…':'Declining…',
+'已拒绝，这单的名额已释放':'Declined — the spot has been released','正在拒绝…':'Declining…','正在确认…':'Confirming…','确认失败，请重试':'Confirmation failed — please try again',
 '团课 · 待确认（到店付款）':'Package · Awaiting confirmation (pay at studio)',
 '核对已收款就确认，没收到就拒绝':'Confirm once you have verified the payment; decline if it was not received',
 '单待确认 · 核对已收款就确认，没收到就拒绝':' awaiting confirmation · Confirm once you have verified the payment; decline if it was not received',
@@ -4884,7 +5030,10 @@ Object.assign(EN_MAP, {
 '客人线下把钱给你（比如现金或转账收到 $200）之后，在这里按手机号、邮箱或会员编号（用户 ID 前 8 位）找到 TA、输金额充值，钱立刻进 TA 的钱包余额，TA 在自己那边马上能看到。每一笔代充都会写进流水：谁充的、给谁充、多少钱、什么时候、怎么收的钱。':'When a guest pays you offline, find them by phone number, email or member ID (first 8 characters of the user ID) and enter the amount. Their balance updates instantly, and every top-up is logged: who, whom, how much, when, and how it was paid.',
 '已付 · 已收款（Stripe / 余额 / 到店）':'Paid · Collected (Stripe / balance / at studio)',
 '只统计未取消的预约。已付 = 已通过 Stripe、钱包余额或到店付款（线下已收、经老师 / 馆主确认）收款；待付 = 已占位还没付款的单，占位 15 分钟未付会自动释放名额，不用追着收钱。到店付款未确认前先计在待付里，确认后转入已付。':'Confirmed bookings only. Paid means Stripe, wallet balance, or pay at studio (collected offline and confirmed by the teacher / owner); unpaid holds are released after 15 minutes. Pay-at-studio bookings count as unpaid until confirmed, then move to paid.',
-'这个身份下暂时没有账号。':'No accounts with this role yet.','有 ':'There are ',' 单到店付款待确认':' pay-at-studio bookings awaiting confirmation','去确认':'Review'
+'这个身份下暂时没有账号。':'No accounts with this role yet.','有 ':'There are ',' 单到店付款待确认':' pay-at-studio bookings awaiting confirmation','去确认':'Review',
+'已确认 · ':'Confirmed · ',' 已收款':' received','已拒绝 · ':'Declined · ',' · 名额已释放':' · spot released',
+'今日已确认':'Confirmed today','确认人：':'Confirmed by: ','拒绝人：':'Declined by: ',
+'已确认 · 已收款':'Confirmed · Paid','已拒绝 · 名额已释放':'Declined · Spot released','团课整套':'Full package'
 });
 var EN_KEYS = Object.keys(EN_MAP).sort(function(a,b){ return b.length - a.length; });
 var EN_PATTERNS = [
